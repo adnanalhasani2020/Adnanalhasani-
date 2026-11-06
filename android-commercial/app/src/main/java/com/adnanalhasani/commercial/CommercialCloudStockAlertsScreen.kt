@@ -65,6 +65,12 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
     var error by remember { mutableStateOf("") }
     var reloadToken by remember { mutableIntStateOf(0) }
     var costingPolicy by remember { mutableStateOf<CommercialInventoryCostingPolicyState?>(null) }
+    var rotationPolicy by remember { mutableStateOf<CommercialInventoryRotationPolicyState?>(null) }
+    var selectedRotationMethod by remember { mutableStateOf("fifo") }
+    var rotationScope by remember { mutableStateOf("location") }
+    var rotationSaving by remember { mutableStateOf(false) }
+    var rotationError by remember { mutableStateOf("") }
+    var rotationNotice by remember { mutableStateOf("") }
     var layerSummary by remember { mutableStateOf<CommercialCloudCostLayerSummary?>(null) }
     var selectedCostMethod by remember { mutableStateOf("weighted_average") }
     var costingScope by remember { mutableStateOf("location") }
@@ -80,6 +86,7 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
             val result = runCatching { loadCommercialCloudStockAlerts(context) }
             val policyResult = runCatching { loadCommercialInventoryCostingPolicy(context) }
             val layersResult = runCatching { loadCommercialCloudCostLayerSummary(context) }
+            val rotationResult = runCatching { loadCommercialInventoryRotationPolicy(context) }
             StockAlertsMain.post {
                 result.onSuccess { products = it }
                     .onFailure { error = it.message ?: "تعذر تحميل المخزون السحابي." }
@@ -92,6 +99,11 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                 }
                 layersResult.onSuccess { layerSummary = it }
                     .onFailure { layerSummary = null }
+                rotationResult.onSuccess {
+                    rotationPolicy = it
+                    selectedRotationMethod = if (rotationScope == "organization") it.organizationMethod ?: it.effectiveMethod else it.locationMethod ?: it.effectiveMethod
+                    rotationError = ""
+                }.onFailure { rotationError = it.message ?: "تعذر تحميل سياسة صرف الدفعات." }
                 loading = false
             }
         }
@@ -220,6 +232,60 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                             "تغيير الطريقة لا يعيد كتابة تكلفة المبيعات السابقة. صلاحية الحفظ محكومة بدورك في المؤسسة على الخادم.",
                             color = StockAlertsMuted, fontSize = 10.sp
                         )
+                    }
+                }
+            }
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Color(0xFFE5EBE8))
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Text("طريقة صرف دفعات المخزون", color = StockAlertsInk, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text(
+                            "الطريقة الفعالة: " + if ((rotationPolicy?.effectiveMethod ?: "fifo") == "fefo")
+                                "FEFO — الأقرب انتهاءً يُصرف أولاً، ثم الأقدم استلاماً"
+                            else "FIFO — أقدم دفعة استلاماً تُصرف أولاً",
+                            color = StockAlertsGreen, fontWeight = FontWeight.SemiBold, fontSize = 12.sp
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            FilterChip(selected = selectedRotationMethod == "fifo", onClick = { selectedRotationMethod = "fifo" }, label = { Text("FIFO") })
+                            FilterChip(selected = selectedRotationMethod == "fefo", onClick = { selectedRotationMethod = "fefo" }, label = { Text("FEFO") })
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            FilterChip(selected = rotationScope == "location", onClick = {
+                                rotationScope = "location"
+                                selectedRotationMethod = rotationPolicy?.locationMethod ?: rotationPolicy?.effectiveMethod ?: "fifo"
+                            }, label = { Text("هذا الموقع") })
+                            FilterChip(selected = rotationScope == "organization", onClick = {
+                                rotationScope = "organization"
+                                selectedRotationMethod = rotationPolicy?.organizationMethod ?: "fifo"
+                            }, label = { Text("المؤسسة بالكامل") })
+                        }
+                        Button(onClick = {
+                            rotationSaving = true
+                            rotationError = ""
+                            rotationNotice = ""
+                            StockAlertsWorker.execute {
+                                val result = runCatching {
+                                    saveCommercialInventoryRotationPolicy(context, selectedRotationMethod, rotationScope)
+                                    loadCommercialInventoryRotationPolicy(context)
+                                }
+                                StockAlertsMain.post {
+                                    result.onSuccess {
+                                        rotationPolicy = it
+                                        rotationNotice = "حُفظت سياسة صرف الدفعات للعمليات الجديدة."
+                                    }.onFailure { rotationError = it.message ?: "تعذر حفظ سياسة صرف الدفعات." }
+                                    rotationSaving = false
+                                }
+                            }
+                        }, enabled = !rotationSaving && !loading, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (rotationSaving) "جارٍ الحفظ…" else "حفظ طريقة صرف الدفعات")
+                        }
+                        if (rotationError.isNotBlank()) Text(rotationError, color = Color(0xFFB3261E), fontSize = 11.sp)
+                        if (rotationNotice.isNotBlank()) Text(rotationNotice, color = StockAlertsGreen, fontSize = 11.sp)
+                        Text("FEFO يتجاهل الدفعات المنتهية أو غير الصالحة للبيع. تغيير السياسة لا يعيد كتابة تخصيصات المبيعات السابقة.", color = StockAlertsMuted, fontSize = 10.sp)
                     }
                 }
             }
