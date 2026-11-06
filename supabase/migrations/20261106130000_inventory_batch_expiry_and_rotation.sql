@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_inventory_rotation_policies (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES public.commercial_organizations(id) ON DELETE RESTRICT,
   location_id uuid REFERENCES public.commercial_organization_locations(id) ON DELETE RESTRICT,
-  rotation_method text NOT NULL DEFAULT 'fifo' CHECK (rotation_method IN ('fifo','fefo')),
+  rotation_method text NOT NULL DEFAULT 'fefo' CHECK (rotation_method IN ('fifo','fefo')),
   created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
