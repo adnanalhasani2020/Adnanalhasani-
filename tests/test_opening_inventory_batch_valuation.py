@@ -15,7 +15,7 @@ def test_opening_valuation_requires_exact_uncovered_stock_and_manager_scope():
     assert "FOR UPDATE" in sql
     assert "opening_batches_must_cover_exact_unvalued_quantity" in sql
     assert "v_covered_quantity>v_balance.quantity_on_hand" in sql
-    assert "unit_cost_minor bigint" in sql
+    assert "v_cost bigint" in sql
 
 
 def test_opening_valuation_preserves_lot_costs_and_expiry():
