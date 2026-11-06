@@ -54,3 +54,12 @@ def test_android_exposes_manager_opening_batch_valuation_and_exact_coverage():
     assert "تسجيل دفعات وتكلفة الرصيد الافتتاحي" in screen
     assert "يجب أن يساوي مجموع الدفعات الكمية غير المغطاة تماماً" in dialog
     assert "إضافة دفعة أخرى" in dialog
+
+
+def test_opening_valuation_displays_the_offering_currency_and_minor_unit_convention():
+    repository = REPOSITORY.read_text(encoding="utf-8")
+    dialog = DIALOG.read_text(encoding="utf-8")
+    assert "currencyCode = offering.optString(\"currency_code\")" in repository
+    assert "currencyCode = selected.currencyCode" in SCREEN.read_text(encoding="utf-8")
+    assert "العملة: $currencyCode" in dialog
+    assert "الوحدة النقدية الصغرى" in dialog
