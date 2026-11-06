@@ -98,6 +98,12 @@ BEGIN
   RAISE EXCEPTION 'bounded_depreciation_preview_failed';
  END IF;
 
+ BEGIN
+  PERFORM public.commercial_fixed_asset_update(asset_id,2,'draft',location_id,staff_id,'',NULL,NULL);
+  RAISE EXCEPTION 'active_asset_reverted_to_draft';
+ EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+ END;
+
  result:=public.commercial_fixed_asset_create(org_id,activity_id,'MACH-001','آلة إنتاج','معدات',
   'SER-001','',date '2026-01-01',date '2026-01-01',100000::bigint,10000::bigint,
   NULL,10,'double_declining',NULL,NULL,'','asset-create-key-002');
