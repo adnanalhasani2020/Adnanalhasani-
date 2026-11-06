@@ -93,6 +93,12 @@ BEGIN
   SET rotation_method=p_rotation_method,updated_at=now()
   WHERE organization_id=p_organization_id AND location_id IS NOT DISTINCT FROM p_location_id
   RETURNING * INTO v_row;
+  INSERT INTO public.commercial_audit_events(
+    organization_id,actor_user_id,action,entity_type,entity_id,metadata
+  ) VALUES (
+    p_organization_id,auth.uid(),'inventory.rotation_policy.updated','inventory_rotation_policy',v_row.id::text,
+    jsonb_build_object('location_id',p_location_id,'rotation_method',p_rotation_method)
+  );
   RETURN jsonb_build_object('id',v_row.id,'rotation_method',v_row.rotation_method,'location_id',v_row.location_id);
 END;
 $function$;
