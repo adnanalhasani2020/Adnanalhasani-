@@ -54,9 +54,9 @@ It adds organization-scoped warehouse, nested storage-location, product-category
 
 ## Storage-location ledger implementation status
 
-Migration authored on 2026-11-06: `supabase/migrations/20261106100000_commercial_inventory_storage_transfers.sql`.
+Migration authored on 2026-11-06: `supabase/held-migrations/storage/20261106100000_commercial_inventory_storage_transfers.sql`.
 
-This is an additive first slice, not a replacement of the branch-level stock source of truth:
+This is an additive first slice held outside `supabase/migrations` until the full integration gate in issue #764 is met. It is not part of the production push set and does not replace the branch-level stock source of truth:
 - `commercial_inventory_balances` remains the authoritative aggregate by branch and offering.
 - `commercial_inventory_storage_balances` stores only quantities explicitly allocated to a storage location. Allocation is rejected if the total allocated quantity would exceed the branch-level on-hand quantity.
 - Storage quantities and both RPC quantity parameters use `numeric(20,6)`, matching the fractional precision of the existing inventory balance and cost-layer flows; they must not be narrowed to integers.
