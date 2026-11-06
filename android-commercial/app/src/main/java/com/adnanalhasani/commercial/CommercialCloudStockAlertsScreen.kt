@@ -67,7 +67,7 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
     var reloadToken by remember { mutableIntStateOf(0) }
     var costingPolicy by remember { mutableStateOf<CommercialInventoryCostingPolicyState?>(null) }
     var rotationPolicy by remember { mutableStateOf<CommercialInventoryRotationPolicyState?>(null) }
-    var selectedRotationMethod by remember { mutableStateOf("fifo") }
+    var selectedRotationMethod by remember { mutableStateOf("fefo") }
     var rotationScope by remember { mutableStateOf("location") }
     var rotationSaving by remember { mutableStateOf(false) }
     var rotationError by remember { mutableStateOf("") }
@@ -263,7 +263,7 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                             }, label = { Text("هذا الموقع") })
                             FilterChip(selected = rotationScope == "organization", onClick = {
                                 rotationScope = "organization"
-                                selectedRotationMethod = rotationPolicy?.organizationMethod ?: "fifo"
+                                selectedRotationMethod = rotationPolicy?.organizationMethod ?: "fefo"
                             }, label = { Text("المؤسسة بالكامل") })
                         }
                         Button(onClick = {
