@@ -60,6 +60,7 @@ def test_fixed_asset_movements_are_audited_idempotent_and_rpc_only():
     assert "commercial_fixed_asset_move" in migration
     assert "commercial_fixed_asset_movement_list" in migration
     assert "asset_movement_idempotency_conflict" in migration
+    assert "asset_movement_has_no_changes" in migration
     assert "asset_movement_requires_movement_rpc" in migration
     assert "ENABLE ROW LEVEL SECURITY" in migration
     assert "REVOKE ALL ON TABLE public.commercial_fixed_asset_movements FROM PUBLIC,anon,authenticated" in migration
