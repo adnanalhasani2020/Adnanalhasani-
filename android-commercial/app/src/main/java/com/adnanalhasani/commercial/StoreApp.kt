@@ -83,6 +83,7 @@ internal fun StoreApp(context: Context) {
     var customerOrderFulfillmentPage by remember { mutableStateOf(false) }
     var customerSupplyRequestsPage by remember { mutableStateOf(false) }
     var commercialCrmPage by remember { mutableStateOf(false) }
+    var commercialCrmOpportunitiesPage by remember { mutableStateOf(false) }
     var merchantPurchaseRequestPage by remember { mutableStateOf(false) }
     var settlingSaleNumber by remember { mutableIntStateOf(-1) }
     var cloudContextRevision by remember { mutableIntStateOf(0) }
