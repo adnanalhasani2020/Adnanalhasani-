@@ -103,6 +103,9 @@ internal fun CommercialCrmScreen(context: Context, onBack: () -> Unit) {
     var showLeadDialog by remember { mutableStateOf(false) }
     var savingLead by remember { mutableStateOf(false) }
     var savingActivity by remember { mutableStateOf(false) }
+    var convertingLeadId by remember { mutableStateOf("") }
+    var conversionNotice by remember { mutableStateOf("") }
+    var pendingConversionKey by remember { mutableStateOf(newCommercialCrmIdempotencyKey()) }
     var followUpLead by remember { mutableStateOf<CommercialCrmLead?>(null) }
     var pendingLeadKey by remember { mutableStateOf(newCommercialCrmIdempotencyKey()) }
     var pendingActivityKey by remember { mutableStateOf(newCommercialCrmIdempotencyKey()) }
@@ -162,6 +165,11 @@ internal fun CommercialCrmScreen(context: Context, onBack: () -> Unit) {
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    if (conversionNotice.isNotBlank()) item {
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF6EF))) {
+                            Text(conversionNotice, Modifier.padding(14.dp), color = Color(0xFF176B46), fontSize = 13.sp)
+                        }
+                    }
                     if (error.isNotBlank()) item {
                         Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF1EF))) {
                             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -183,7 +191,36 @@ internal fun CommercialCrmScreen(context: Context, onBack: () -> Unit) {
                         items(leads, key = { it.id }) { lead ->
                             CrmLeadCard(
                                 lead = lead,
+                                converting = convertingLeadId == lead.id,
                                 onFollowUp = { followUpLead = lead },
+                                onConvert = {
+                                    if (convertingLeadId.isBlank()) {
+                                        convertingLeadId = lead.id
+                                        conversionNotice = ""
+                                        error = ""
+                                        crmScreenIo.execute {
+                                            val result = runCatching {
+                                                convertCommercialCrmLead(context, lead, pendingConversionKey)
+                                            }
+                                            crmScreenMain.post {
+                                                result.onSuccess { response ->
+                                                    val alreadyConverted = response.optBoolean("already_converted")
+                                                    val reused = response.optBoolean("reused_existing_customer")
+                                                    conversionNotice = when {
+                                                        alreadyConverted -> "تم تأكيد التحويل السابق لـ«${lead.name}» دون إنشاء سجل مكرر."
+                                                        reused -> "تم ربط «${lead.name}» بعميل موجود دون إنشاء سجل مكرر."
+                                                        else -> "تم تحويل «${lead.name}» إلى سجل عميل جديد."
+                                                    }
+                                                    pendingConversionKey = newCommercialCrmIdempotencyKey()
+                                                    refreshToken++
+                                                }.onFailure {
+                                                    error = it.message ?: "تعذر تحويل العميل المحتمل."
+                                                }
+                                                convertingLeadId = ""
+                                            }
+                                        }
+                                    }
+                                },
                                 onStatus = { status ->
                                     crmScreenIo.execute {
                                         val result = runCatching {
@@ -301,7 +338,7 @@ private fun CrmEmptyState(title: String, detail: String) {
 }
 
 @Composable
-private fun CrmLeadCard(lead: CommercialCrmLead, onFollowUp: () -> Unit, onStatus: (String) -> Unit) {
+private fun CrmLeadCard(lead: CommercialCrmLead, converting: Boolean, onFollowUp: () -> Unit, onConvert: () -> Unit, onStatus: (String) -> Unit) {
     var menuExpanded by remember(lead.id) { mutableStateOf(false) }
     Card(colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5EBE8)), shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -327,8 +364,15 @@ private fun CrmLeadCard(lead: CommercialCrmLead, onFollowUp: () -> Unit, onStatu
             Text("المصدر: ${crmSourceLabel(lead.source)}", color = Color(0xFF71817B), fontSize = 11.sp)
             if (lead.nextFollowUpAt.isNotBlank()) Text("المتابعة القادمة: ${crmDateLabel(lead.nextFollowUpAt)}", color = Color(0xFF167D63), fontSize = 12.sp)
             if (lead.notes.isNotBlank()) Text(lead.notes, color = Color(0xFF52665F), fontSize = 12.sp)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                OutlinedButton(onClick = onFollowUp) { Text("إضافة متابعة") }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = onFollowUp, enabled = !converting) { Text("إضافة متابعة") }
+                if (lead.convertedCustomerId.isBlank()) {
+                    Button(onClick = onConvert, enabled = !converting) {
+                        Text(if (converting) "جارٍ التحويل…" else "تحويل إلى عميل")
+                    }
+                } else {
+                    Text("تم التحويل إلى عميل", color = Color(0xFF167D63), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                }
             }
         }
     }

@@ -1,0 +1,60 @@
+name: Commercial CRM lead conversion smoke test
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/20261106111004_commercial_crm_leads_followups.sql'
+      - 'supabase/migrations/20261106150000_commercial_crm_lead_conversion.sql'
+      - 'supabase/tests/fixtures/commercial_crm_leads_schema_fixture.sql'
+      - 'supabase/tests/database/commercial_crm_lead_conversion_smoke_test.sql'
+      - '.github/workflows/commercial-crm-lead-conversion-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  crm-lead-conversion:
+    timeout-minutes: 10
+    name: PostgreSQL 17 CRM lead conversion and duplicate prevention
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Load isolated CRM schema fixture
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_crm_leads_schema_fixture.sql
+      - name: Apply CRM leads and follow-ups migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106111004_commercial_crm_leads_followups.sql
+      - name: Apply CRM lead conversion migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106150000_commercial_crm_lead_conversion.sql
+      - name: Verify conversion, duplicate prevention, role isolation and idempotency
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_crm_lead_conversion_smoke_test.sql

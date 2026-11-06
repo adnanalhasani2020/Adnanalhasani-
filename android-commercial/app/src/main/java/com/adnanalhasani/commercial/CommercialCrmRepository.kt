@@ -16,6 +16,8 @@ internal data class CommercialCrmLead(
     val assignedTo: String,
     val notes: String,
     val nextFollowUpAt: String,
+    val convertedCustomerId: String,
+    val convertedAt: String,
     val version: Int,
     val createdAt: String
 )
@@ -68,6 +70,8 @@ internal fun loadCommercialCrmLeads(context: Context): List<CommercialCrmLead> {
                 assignedTo = row.optString("assigned_to"),
                 notes = row.optString("notes"),
                 nextFollowUpAt = row.optString("next_follow_up_at").takeUnless { it == "null" }.orEmpty(),
+                convertedCustomerId = row.optString("converted_customer_id").takeUnless { it == "null" }.orEmpty(),
+                convertedAt = row.optString("converted_at").takeUnless { it == "null" }.orEmpty(),
                 version = row.optInt("version", 1),
                 createdAt = row.optString("created_at")
             ))
@@ -199,6 +203,24 @@ internal fun updateCommercialCrmActivity(
             .put("p_expected_version", activity.version)
             .put("p_status", status)
             .put("p_description", description),
+        access
+    ))
+}
+
+internal fun convertCommercialCrmLead(
+    context: Context,
+    lead: CommercialCrmLead,
+    idempotencyKey: String
+): JSONObject {
+    require(lead.id.isNotBlank() && idempotencyKey.length in 8..200)
+    val (_, _, access) = crmContext(context)
+    return JSONObject(SupabaseClient.request(
+        "/rest/v1/rpc/commercial_crm_lead_convert",
+        "POST",
+        JSONObject()
+            .put("p_lead_id", lead.id)
+            .put("p_expected_version", lead.version)
+            .put("p_idempotency_key", idempotencyKey),
         access
     ))
 }
