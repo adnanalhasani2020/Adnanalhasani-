@@ -31,6 +31,7 @@ internal fun CommercialSupportTicketsScreen(context:Context,onBack:()->Unit){
  val appContext=context.applicationContext
  var tickets by remember{mutableStateOf<List<CommercialSupportTicket>>(emptyList())}
  var customers by remember{mutableStateOf<List<CommercialCloudCustomer>>(emptyList())}
+ var members by remember{mutableStateOf<List<CommercialSupportMember>>(emptyList())}
  var role by remember{mutableStateOf("staff")}
  var filter by remember{mutableStateOf("")}
  var loading by remember{mutableStateOf(true)}
@@ -48,11 +49,13 @@ internal fun CommercialSupportTicketsScreen(context:Context,onBack:()->Unit){
   supportTicketIo.execute{
    val ticketResult=runCatching{loadCommercialSupportTickets(appContext,filter)}
    val customerResult=runCatching{loadCommercialCloudCustomers(appContext)}.getOrDefault(emptyList())
+   val memberResult=runCatching{loadCommercialSupportMembers(appContext)}.getOrDefault(emptyList())
    val roleResult=runCatching{loadCommercialSupportRole(appContext)}.getOrDefault("staff")
    supportTicketMain.post{
     loading=false
     ticketResult.onSuccess{tickets=it}.onFailure{error=it.message?:"تعذر تحميل تذاكر الدعم."}
     customers=customerResult
+    members=memberResult
     role=roleResult
    }
   }
@@ -116,9 +119,11 @@ internal fun CommercialSupportTicketsScreen(context:Context,onBack:()->Unit){
   var category by remember{mutableStateOf("general")}
   var priority by remember{mutableStateOf("normal")}
   var customerId by remember{mutableStateOf("")}
+  var assignedTo by remember{mutableStateOf("")}
   var categoryMenu by remember{mutableStateOf(false)}
   var priorityMenu by remember{mutableStateOf(false)}
   var customerMenu by remember{mutableStateOf(false)}
+  var assigneeMenu by remember{mutableStateOf(false)}
   var localError by remember{mutableStateOf("")}
   AlertDialog(
    onDismissRequest={if(!busy)createOpen=false},
@@ -151,12 +156,23 @@ internal fun CommercialSupportTicketsScreen(context:Context,onBack:()->Unit){
       customers.forEach{customer->DropdownMenuItem(text={Text(customer.label)},onClick={customerId=customer.id;customerMenu=false})}
      }
     }
+    if(role in setOf("owner","admin","manager")){
+     Box{
+      OutlinedButton(onClick={assigneeMenu=true},modifier=Modifier.fillMaxWidth()){
+       Text("المسؤول: "+(members.firstOrNull{it.userId==assignedTo}?.label?:"تعييني تلقائياً"))
+      }
+      DropdownMenu(assigneeMenu,{assigneeMenu=false}){
+       DropdownMenuItem(text={Text("تعييني تلقائياً")},onClick={assignedTo="";assigneeMenu=false})
+       members.forEach{member->DropdownMenuItem(text={Text(member.label)},onClick={assignedTo=member.userId;assigneeMenu=false})}
+      }
+     }
+    }
     if(localError.isNotBlank())Text(localError,color=MaterialTheme.colorScheme.error,fontSize=11.sp)
    }},
    confirmButton={Button(enabled=!busy&&subject.isNotBlank()&&description.isNotBlank(),onClick={
     busy=true;localError=""
     supportTicketIo.execute{
-     val result=runCatching{createCommercialSupportTicket(appContext,customerId.takeIf{it.isNotBlank()},subject,description,category,priority,null,newCommercialSupportIdempotencyKey())}
+     val result=runCatching{createCommercialSupportTicket(appContext,customerId.takeIf{it.isNotBlank()},subject,description,category,priority,assignedTo.takeIf{it.isNotBlank()},newCommercialSupportIdempotencyKey())}
      supportTicketMain.post{busy=false;result.onSuccess{createOpen=false;notice="تم إنشاء التذكرة رقم #${it.optLong("ticket_no")}.";refresh++}.onFailure{localError=it.message?:"تعذر إنشاء التذكرة."}}
     }
    }){Text(if(busy)"جارٍ الحفظ…" else "حفظ التذكرة")}},
@@ -167,6 +183,8 @@ internal fun CommercialSupportTicketsScreen(context:Context,onBack:()->Unit){
  selectedTicket?.let{ticket->
   var selectedStatus by remember(ticket.id,ticket.version){mutableStateOf(ticket.status)}
   var selectedPriority by remember(ticket.id,ticket.version){mutableStateOf(ticket.priority)}
+  var selectedAssignee by remember(ticket.id,ticket.version){mutableStateOf(ticket.assignedTo)}
+  var assigneeMenu by remember{mutableStateOf(false)}
   var statusMenu by remember{mutableStateOf(false)}
   var priorityMenu by remember{mutableStateOf(false)}
   var messageText by remember(ticket.id){mutableStateOf("")}
@@ -182,6 +200,16 @@ internal fun CommercialSupportTicketsScreen(context:Context,onBack:()->Unit){
    text={Column(Modifier.fillMaxWidth().heightIn(max=540.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
     Text(ticket.description,color=supportInk,fontSize=12.sp)
     Text("العميل: "+ticket.customerName.ifBlank{"غير مرتبط"},color=supportMuted,fontSize=11.sp)
+    if(canManage){
+     Box{
+      OutlinedButton(onClick={assigneeMenu=true},modifier=Modifier.fillMaxWidth()){
+       Text("المسؤول: "+(members.firstOrNull{it.userId==selectedAssignee}?.label?:selectedAssignee.take(8)))
+      }
+      DropdownMenu(assigneeMenu,{assigneeMenu=false}){
+       members.forEach{member->DropdownMenuItem(text={Text(member.label)},onClick={selectedAssignee=member.userId;assigneeMenu=false})}
+      }
+     }
+    }
     Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){
      Box(Modifier.weight(1f)){
       OutlinedButton(onClick={statusMenu=true},modifier=Modifier.fillMaxWidth()){Text(supportStatus(selectedStatus),fontSize=11.sp)}
@@ -197,12 +225,12 @@ internal fun CommercialSupportTicketsScreen(context:Context,onBack:()->Unit){
      }
     }
     Button(
-     enabled=!busy&&(selectedStatus!=ticket.status||selectedPriority!=ticket.priority),
+     enabled=!busy&&(selectedStatus!=ticket.status||selectedPriority!=ticket.priority||selectedAssignee!=ticket.assignedTo),
      modifier=Modifier.fillMaxWidth(),
      onClick={
       busy=true;localError=""
       supportTicketIo.execute{
-       val result=runCatching{updateCommercialSupportTicket(appContext,ticket,selectedStatus,selectedPriority,ticket.assignedTo.takeIf{it.isNotBlank()})}
+       val result=runCatching{updateCommercialSupportTicket(appContext,ticket,selectedStatus,selectedPriority,selectedAssignee.takeIf{it.isNotBlank()})}
        supportTicketMain.post{busy=false;result.onSuccess{selectedTicket=null;notice="تم تحديث التذكرة.";refresh++}.onFailure{localError=it.message?:"تعذر تحديث التذكرة."}}
       }
      }
