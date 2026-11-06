@@ -121,6 +121,14 @@ BEGIN
  EXCEPTION WHEN insufficient_privilege THEN NULL;
  END;
 
+ -- Membership alone is insufficient when the organization has been suspended.
+ UPDATE public.commercial_organizations SET state='suspended' WHERE id=v_other_org;
+ BEGIN
+  PERFORM public.commercial_crm_lead_list(v_other_org,v_other_activity,100);
+  RAISE EXCEPTION 'suspended_organization_crm_access_was_allowed';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+
  -- RLS-only tables: no direct access, and every public RPC is authenticated-only.
  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid='public.commercial_crm_leads'::regclass)
   OR NOT (SELECT relrowsecurity FROM pg_class WHERE oid='public.commercial_crm_activities'::regclass) THEN
