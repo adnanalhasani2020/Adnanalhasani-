@@ -97,6 +97,10 @@ internal fun CommercialOpeningInventoryBatchValuationDialog(
                     fontSize = 12.sp
                 )
                 Text(
+                    "العملة: $currencyCode. أدخل التكلفة بالوحدة النقدية الصغرى، وليس بالقيمة العشرية المعروضة في الفاتورة.",
+                    fontSize = 11.sp
+                )
+                Text(
                     "الكمية غير المغطاة بطبقات تكلفة: ${uncoveredQuantity.stripTrailingZeros().toPlainString()} $unitName",
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp
