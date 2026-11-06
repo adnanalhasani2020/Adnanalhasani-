@@ -9,6 +9,8 @@ on:
     branches: [main]
     paths:
       - 'supabase/migrations/20261106113918_commercial_fixed_assets_register.sql'
+      - 'supabase/migrations/20261106160000_commercial_fixed_asset_movements.sql'
+      - 'supabase/tests/database/commercial_fixed_assets_smoke_test.sql'
       - 'supabase/migrations/20261106170000_commercial_fixed_asset_maintenance.sql'
       - 'supabase/tests/fixtures/commercial_fixed_assets_schema_fixture.sql'
       - 'supabase/tests/database/commercial_fixed_asset_maintenance_smoke_test.sql'
@@ -54,6 +56,10 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_fixed_assets_schema_fixture.sql
       - name: Apply fixed asset register migration
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106113918_commercial_fixed_assets_register.sql
+      - name: Apply fixed asset movement migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106160000_commercial_fixed_asset_movements.sql
+      - name: Verify fixed asset register and movement lifecycle
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_fixed_assets_smoke_test.sql
       - name: Apply asset maintenance migration
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106170000_commercial_fixed_asset_maintenance.sql
       - name: Verify maintenance assignment, status transitions, tenant isolation and privileges
