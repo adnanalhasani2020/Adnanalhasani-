@@ -203,6 +203,24 @@ internal fun updateCommercialCrmActivity(
     ))
 }
 
+internal fun convertCommercialCrmLead(
+    context: Context,
+    lead: CommercialCrmLead,
+    idempotencyKey: String
+): JSONObject {
+    require(lead.id.isNotBlank() && idempotencyKey.length in 8..200)
+    val (_, _, access) = crmContext(context)
+    return JSONObject(SupabaseClient.request(
+        "/rest/v1/rpc/commercial_crm_lead_convert",
+        "POST",
+        JSONObject()
+            .put("p_lead_id", lead.id)
+            .put("p_expected_version", lead.version)
+            .put("p_idempotency_key", idempotencyKey),
+        access
+    ))
+}
+
 internal fun newCommercialCrmIdempotencyKey(): String = UUID.randomUUID().toString()
 
 
