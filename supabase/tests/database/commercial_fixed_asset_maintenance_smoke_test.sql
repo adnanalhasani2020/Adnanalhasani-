@@ -73,6 +73,11 @@ BEGIN
  IF result->>'status'<>'in_progress' OR (result->>'version')::integer<>2 THEN
   RAISE EXCEPTION 'maintenance_start_failed';
  END IF;
+ BEGIN
+  PERFORM public.commercial_fixed_asset_maintenance_update(maintenance_id,2,'completed',date '2026-11-09','مركز الصيانة',2500::bigint,'');
+  RAISE EXCEPTION 'maintenance_completed_before_schedule';
+ EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+ END;
  result:=public.commercial_fixed_asset_maintenance_update(maintenance_id,2,'completed',date '2026-11-11',
   'مركز الصيانة',2750::bigint,'تم التنفيذ بنجاح');
  IF result->>'status'<>'completed' OR (result->>'version')::integer<>3 THEN
