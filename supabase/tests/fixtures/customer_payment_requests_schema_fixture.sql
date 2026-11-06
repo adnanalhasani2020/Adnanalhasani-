@@ -36,12 +36,20 @@ CREATE TABLE public.commercial_sales(
  status text NOT NULL,total_minor bigint NOT NULL,currency_code text NOT NULL,
  receipt_number text NOT NULL,created_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE SEQUENCE public.commercial_payment_receipt_seq START 9000000000;
 CREATE TABLE public.commercial_payments(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  organization_id uuid NOT NULL REFERENCES public.commercial_organizations(id),
- sale_id uuid NOT NULL REFERENCES public.commercial_sales(id),
- amount_minor bigint NOT NULL,status text NOT NULL,receipt_number text NOT NULL,
- idempotency_key text UNIQUE
+ sale_id uuid REFERENCES public.commercial_sales(id),
+ provider text NOT NULL DEFAULT 'internal',
+ idempotency_key text NOT NULL UNIQUE,
+ amount_minor bigint NOT NULL,
+ currency_code text NOT NULL,
+ status text NOT NULL,
+ payment_method_type text,
+ receipt_number bigint NOT NULL DEFAULT nextval('public.commercial_payment_receipt_seq'),
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE TABLE public.commercial_sales_returns(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),sale_id uuid NOT NULL,
@@ -78,9 +86,12 @@ BEGIN
  IF p_amount_minor<=0 OR p_amount_minor::numeric>v_due THEN
   RAISE EXCEPTION 'payment_exceeds_due' USING ERRCODE='22023';
  END IF;
- INSERT INTO public.commercial_payments(organization_id,sale_id,amount_minor,status,receipt_number,idempotency_key)
- VALUES(v_sale.organization_id,p_sale_id,p_amount_minor,'succeeded','RCT-'||substr(md5(p_idempotency_key),1,8),p_idempotency_key)
- RETURNING id INTO v_id;
+ INSERT INTO public.commercial_payments(
+  organization_id,sale_id,provider,idempotency_key,amount_minor,currency_code,status,payment_method_type
+ ) VALUES(
+  v_sale.organization_id,p_sale_id,'internal',p_idempotency_key,p_amount_minor,
+  v_sale.currency_code,'succeeded',p_payment_method_type
+ ) RETURNING id INTO v_id;
  RETURN jsonb_build_object('payment_id',v_id,'replayed',false);
 END $$;
 
@@ -106,5 +117,8 @@ INSERT INTO public.commercial_organization_members(organization_id,user_id,role,
  ('20000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000005','manager','active');
 INSERT INTO public.commercial_sales(id,organization_id,customer_id,status,total_minor,currency_code,receipt_number) VALUES
  ('50000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','completed',10000,'SAR','INV-TEST-001');
-INSERT INTO public.commercial_payments(organization_id,sale_id,amount_minor,status,receipt_number,idempotency_key) VALUES
- ('20000000-0000-0000-0000-000000000001','50000000-0000-0000-0000-000000000001',2000,'succeeded','RCT-INITIAL','initial-payment');
+INSERT INTO public.commercial_payments(
+ organization_id,sale_id,provider,idempotency_key,amount_minor,currency_code,status,receipt_number
+) VALUES
+ ('20000000-0000-0000-0000-000000000001','50000000-0000-0000-0000-000000000001',
+  'internal','initial-payment',2000,'SAR','succeeded',9000000001);
