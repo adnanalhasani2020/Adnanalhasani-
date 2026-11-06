@@ -414,7 +414,7 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
             }
             item {
                 Text(
-                    "الكمية المعروضة هي المتاح للبيع بعد طرح المحجوز من الرصيد. هذه شاشة متابعة فقط؛ لا تعدّل الأرصدة ولا تنشئ حركات مخزون.",
+                    "المتاح للبيع محسوب من الدفعات الصالحة فقط بعد طرح المحجوز؛ الدفعات المنتهية أو التالفة أو المحجورة مستبعدة. هذه شاشة متابعة فقط ولا تعدّل الأرصدة.",
                     color = StockAlertsMuted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 8.dp)
                 )
             }
