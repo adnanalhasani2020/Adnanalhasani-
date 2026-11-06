@@ -29,6 +29,9 @@ def test_lead_conversion_prevents_duplicates_and_is_idempotent():
     assert "crm-lead:" in sql
     assert "request_fingerprint" in sql
     assert "FOR UPDATE" in sql
+    assert "crm-customer-email:" in sql
+    assert "crm-customer-phone:" in sql
+    assert "pg_advisory_xact_lock" in sql
     assert "'converted_customer_id',c.customer_id" in sql
     assert "'converted_at',c.created_at" in sql
 
