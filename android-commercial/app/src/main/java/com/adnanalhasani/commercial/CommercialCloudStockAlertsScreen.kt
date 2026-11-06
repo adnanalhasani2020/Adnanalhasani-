@@ -59,6 +59,7 @@ private val StockAlertsMain = Handler(Looper.getMainLooper())
 @Composable
 internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Unit) {
     var products by remember { mutableStateOf<List<CommercialCloudStockAlert>>(emptyList()) }
+    var inventoryBatches by remember { mutableStateOf<List<CommercialCloudInventoryBatch>>(emptyList()) }
     var search by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("all") }
     var loading by remember { mutableStateOf(false) }
@@ -87,6 +88,7 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
             val policyResult = runCatching { loadCommercialInventoryCostingPolicy(context) }
             val layersResult = runCatching { loadCommercialCloudCostLayerSummary(context) }
             val rotationResult = runCatching { loadCommercialInventoryRotationPolicy(context) }
+            val batchesResult = runCatching { loadCommercialCloudInventoryBatches(context) }
             StockAlertsMain.post {
                 result.onSuccess { products = it }
                     .onFailure { error = it.message ?: "تعذر تحميل المخزون السحابي." }
@@ -104,6 +106,7 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                     selectedRotationMethod = if (rotationScope == "organization") it.organizationMethod ?: it.effectiveMethod else it.locationMethod ?: it.effectiveMethod
                     rotationError = ""
                 }.onFailure { rotationError = it.message ?: "تعذر تحميل سياسة صرف الدفعات." }
+                batchesResult.onSuccess { inventoryBatches = it }.onFailure { inventoryBatches = emptyList() }
                 loading = false
             }
         }
@@ -309,6 +312,26 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                             if (uncovered.signum() > 0) {
                                 Text("كمية الرصيد التي لا تغطيها طبقات تكلفة: ${uncovered.stripTrailingZeros().toPlainString()} — لا تُخمن لها تكلفة.", color = Color(0xFF9A5B00), fontSize = 11.sp)
                             }
+                        }
+                    }
+                }
+            }
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color(0xFFE5EBE8))) {
+                    Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("دفعات المخزون الفعلية", color = StockAlertsInk, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("تظهر الكميات المتبقية لكل دفعة وتاريخ صلاحيتها وحالتها. الدفعات المنتهية أو المحجورة لا تدخل في الصرف.", color = StockAlertsMuted, fontSize = 11.sp)
+                        if (inventoryBatches.isEmpty()) {
+                            Text("لا توجد دفعات مسجلة بكمية متبقية لهذا الموقع، أو أن بيانات الدفعات لم تُحمّل.", color = StockAlertsMuted, fontSize = 11.sp)
+                        } else {
+                            inventoryBatches.take(60).forEach { batch ->
+                                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text(batch.productName + if (batch.batchNumber.isNotBlank()) " · ${batch.batchNumber}" else " · دفعة بلا رقم", color = StockAlertsInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                    Text("المتبقي: ${batch.quantityRemaining.stripTrailingZeros().toPlainString()} · الصلاحية: ${batch.expiresOn ?: "غير محددة"}", color = StockAlertsMuted, fontSize = 11.sp)
+                                    Text(when (batch.stockCondition) { "expired" -> "منتهية الصلاحية — غير قابلة للبيع"; "damaged" -> "تالف — غير قابل للبيع"; "quarantine" -> "محجور — غير قابل للبيع"; else -> "صالح مبدئياً للصرف" }, color = if (batch.stockCondition == "sellable") StockAlertsGreen else Color(0xFFB3261E), fontSize = 10.sp)
+                                }
+                            }
+                            if (inventoryBatches.size > 60) Text("يتم عرض أول 60 دفعة؛ الإجمالي ${inventoryBatches.size}.", color = StockAlertsMuted, fontSize = 10.sp)
                         }
                     }
                 }
