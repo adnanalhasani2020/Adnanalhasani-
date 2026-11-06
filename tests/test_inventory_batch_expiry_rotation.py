@@ -68,3 +68,5 @@ def test_android_purchase_and_stock_screens_expose_batch_workflow():
     assert "stock_condition" in inventory
     assert "دفعات المخزون الفعلية" in screen
     assert "FEFO" in screen and "FIFO" in screen
+    assert "batchLoadError" in screen
+    assert "تعذر تحميل بيانات الدفعات" in screen
