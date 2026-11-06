@@ -2,7 +2,7 @@
 -- of the production-shaped, data-free commercial quantity fixture.
 CREATE TABLE public.commercial_organizations (id uuid PRIMARY KEY);
 CREATE TABLE public.commercial_organization_locations (id uuid PRIMARY KEY, organization_id uuid, state text);
-CREATE TABLE public.commercial_offerings (id uuid PRIMARY KEY);
+CREATE TABLE public.commercial_offerings (id uuid PRIMARY KEY, activity_id uuid, product_id uuid);
 CREATE TABLE public.commercial_purchase_receipts (
   id uuid PRIMARY KEY, organization_id uuid, purchase_order_id uuid, location_id uuid,
   idempotency_key text, request_fingerprint text, received_by uuid, created_at timestamptz
