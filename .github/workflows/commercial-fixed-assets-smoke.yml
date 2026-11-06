@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - 'supabase/migrations/20261106113918_commercial_fixed_assets_register.sql'
+      - 'supabase/migrations/20261106160000_commercial_fixed_asset_movements.sql'
       - 'supabase/tests/fixtures/commercial_fixed_assets_schema_fixture.sql'
       - 'supabase/tests/database/commercial_fixed_assets_smoke_test.sql'
       - '.github/workflows/commercial-fixed-assets-smoke.yml'
