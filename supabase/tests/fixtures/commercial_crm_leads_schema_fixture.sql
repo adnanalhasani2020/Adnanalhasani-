@@ -11,7 +11,7 @@ LANGUAGE sql STABLE AS $$
  SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid
 $$;
 CREATE TABLE public.commercial_organizations(
- id uuid PRIMARY KEY,name text NOT NULL,state text NOT NULL DEFAULT 'active',deleted_at timestamptz
+ id uuid PRIMARY KEY,name text NOT NULL,state text NOT NULL DEFAULT 'active',deleted_at timestamptz,default_currency_code text NOT NULL DEFAULT 'YER'
 );
 CREATE TABLE public.commercial_organization_members(
  organization_id uuid NOT NULL REFERENCES public.commercial_organizations(id),
