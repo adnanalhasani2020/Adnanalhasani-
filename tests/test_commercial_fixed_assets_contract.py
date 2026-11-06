@@ -12,6 +12,9 @@ def test_fixed_asset_register_is_cloud_only_and_wired():
     assert "onFixedAssets = { commercialFixedAssetsPage = true }" in store
     assert "commercialFixedAssetsPage -> CommercialFixedAssetsScreen" in store
     assert "معاينة الإهلاك" in screen
+    assert "سجل النقل" in screen
+    assert "حفظ الموقع والمسؤول" in screen
+    assert "سبب نقل الأصل أو تغيير المسؤول" in screen
     assert "لا ينشئ قيد شراء أو قيد إهلاك أو حركة مخزون" in screen
     assert "تأكيد الاستبعاد" in screen
 
@@ -24,9 +27,15 @@ def test_fixed_asset_repository_uses_authenticated_rpc_boundary():
         "commercial_fixed_asset_list",
         "commercial_fixed_asset_update",
         "commercial_fixed_asset_depreciation_preview",
+        "commercial_fixed_asset_move",
+        "commercial_fixed_asset_movement_list",
     ):
         assert f"/rest/v1/rpc/{rpc}" in repository
     assert "newCommercialFixedAssetIdempotencyKey" in repository
+    assert "loadCommercialFixedAssetLocations" in repository
+    assert "loadCommercialFixedAssetCustodians" in repository
+    assert "loadCommercialFixedAssetMovements" in repository
+    assert "newCommercialFixedAssetMovementKey" in repository
 
 
 def test_fixed_asset_database_contract_is_tenant_scoped_and_non_posting():
