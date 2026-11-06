@@ -34,7 +34,7 @@ CREATE TABLE public.commercial_sales(
  id uuid PRIMARY KEY,organization_id uuid NOT NULL REFERENCES public.commercial_organizations(id),
  customer_id uuid NOT NULL REFERENCES public.commercial_customers(id),
  status text NOT NULL,total_minor bigint NOT NULL,currency_code text NOT NULL,
- receipt_number text NOT NULL,created_at timestamptz NOT NULL DEFAULT now()
+ receipt_number bigint NOT NULL,created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE SEQUENCE public.commercial_payment_receipt_seq START 9000000000;
 CREATE TABLE public.commercial_payments(
@@ -57,10 +57,16 @@ CREATE TABLE public.commercial_sales_returns(
  approved_refund_minor bigint NOT NULL DEFAULT 0,status text NOT NULL DEFAULT 'pending'
 );
 CREATE TABLE public.commercial_user_notifications(
- id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid NOT NULL,organization_id uuid NOT NULL,
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+ user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+ organization_id uuid REFERENCES public.commercial_organizations(id) ON DELETE CASCADE,
  notification_type text NOT NULL CHECK (notification_type IN ('order','payment','booking','account_access','approval','system','security','message','reminder')),
- title text NOT NULL,body text NOT NULL,entity_type text NOT NULL,
- entity_id uuid NOT NULL,priority text NOT NULL,metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+ title text NOT NULL CHECK (length(btrim(title)) BETWEEN 1 AND 180),
+ body text NOT NULL CHECK (length(body)<=4000),
+ entity_type text,
+ entity_id uuid,
+ priority text NOT NULL CHECK (priority IN ('low','normal','high','urgent')),
+ metadata jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(metadata)='object'),
  created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -117,7 +123,7 @@ INSERT INTO public.commercial_organization_members(organization_id,user_id,role,
  ('20000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000004','viewer','active'),
  ('20000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000005','manager','active');
 INSERT INTO public.commercial_sales(id,organization_id,customer_id,status,total_minor,currency_code,receipt_number) VALUES
- ('50000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','completed',10000,'SAR','INV-TEST-001');
+ ('50000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','completed',10000,'SAR',9000000002);
 INSERT INTO public.commercial_payments(
  organization_id,sale_id,provider,idempotency_key,amount_minor,currency_code,status,receipt_number
 ) VALUES
