@@ -10,6 +10,10 @@ ALTER TABLE public.commercial_purchase_receipt_items
   ADD COLUMN IF NOT EXISTS batch_number text,
   ADD COLUMN IF NOT EXISTS expires_on date;
 
+CREATE INDEX IF NOT EXISTS commercial_inventory_cost_layers_fefo_idx
+  ON public.commercial_inventory_cost_layers(organization_id,location_id,offering_id,expires_on,received_at,id)
+  WHERE quantity_remaining>0 AND stock_condition='sellable';
+
 ALTER TABLE public.commercial_inventory_cost_layers
   ADD CONSTRAINT commercial_inventory_cost_layers_batch_number_check
   CHECK (batch_number IS NULL OR length(btrim(batch_number)) BETWEEN 1 AND 100);
