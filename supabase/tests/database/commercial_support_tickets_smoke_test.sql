@@ -109,6 +109,17 @@ BEGIN
  result:=public.commercial_support_ticket_list(org_id,activity_id,NULL,100);
  IF jsonb_array_length(result)<>0 THEN RAISE EXCEPTION 'reassigned_ticket_visible_to_previous_assignee'; END IF;
 
+ PERFORM set_config('request.jwt.claim.sub',manager_id::text,true);
+ result:=public.commercial_support_ticket_update(ticket_id,4,'closed','urgent',manager_id);
+ IF result->>'status'<>'closed' OR (result->>'version')::integer<>5 THEN
+  RAISE EXCEPTION 'manager_close_ticket_failed';
+ END IF;
+ BEGIN
+  PERFORM public.commercial_support_ticket_message_create(ticket_id,'رسالة بعد الإغلاق','support-message-closed-001');
+  RAISE EXCEPTION 'closed_ticket_accepted_new_message';
+ EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+ END;
+
  PERFORM set_config('request.jwt.claim.sub',outsider_id::text,true);
  BEGIN
   PERFORM public.commercial_support_ticket_list(org_id,activity_id,NULL,100);
