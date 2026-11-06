@@ -70,6 +70,16 @@ END;
 $function$;
 REVOKE ALL ON FUNCTION public.commercial_support_context_role(uuid,uuid) FROM PUBLIC,anon,authenticated;
 
+CREATE OR REPLACE FUNCTION public.commercial_support_my_role(
+ p_organization_id uuid,p_activity_id uuid
+) RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $function$
+BEGIN
+ RETURN public.commercial_support_context_role(p_organization_id,p_activity_id);
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.commercial_support_my_role(uuid,uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.commercial_support_my_role(uuid,uuid) TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.commercial_support_ticket_create(
  p_organization_id uuid,p_activity_id uuid,p_customer_id uuid,p_subject text,p_description text,
  p_category text,p_priority text,p_assigned_to uuid,p_source text,p_idempotency_key text
