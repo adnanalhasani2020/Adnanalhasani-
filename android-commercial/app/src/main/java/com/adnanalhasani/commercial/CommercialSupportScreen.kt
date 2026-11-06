@@ -231,7 +231,17 @@ internal fun CommercialSupportTicketsScreen(context:Context,onBack:()->Unit){
       supportTicketIo.execute{
        val result=runCatching{addCommercialSupportMessage(appContext,ticket.id,messageText,newCommercialSupportIdempotencyKey())}
        val refreshed=runCatching{loadCommercialSupportMessages(appContext,ticket.id)}
-       supportTicketMain.post{busy=false;result.onSuccess{messageText="";refreshed.onSuccess{messages=it};notice="تمت إضافة الملاحظة.";refresh++}.onFailure{localError=it.message?:"تعذر إضافة الملاحظة."}}
+       val refreshedTickets=runCatching{loadCommercialSupportTickets(appContext,filter)}
+       supportTicketMain.post{
+        busy=false
+        result.onSuccess{
+         messageText=""
+         refreshed.onSuccess{messages=it}
+         refreshedTickets.onSuccess{rows->tickets=rows;selectedTicket=rows.firstOrNull{row->row.id==ticket.id}?:ticket}
+         notice="تمت إضافة الملاحظة."
+         refresh++
+        }.onFailure{localError=it.message?:"تعذر إضافة الملاحظة."}
+       }
       }
      }
     ){Text("إرسال الملاحظة")}
