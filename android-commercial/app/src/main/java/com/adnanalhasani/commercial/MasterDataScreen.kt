@@ -109,7 +109,16 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
-            Text(if (selected.second == "commercial_storage_locations") "مواقع تخزين مرتبطة بمستودع؛ لا تغيّر أرصدة المخزون من هذه الشاشة." else "بيانات محفوظة في المؤسسة السحابية، وليست بيانات محلية.", color = Color(0xFF71817B), fontSize = 12.sp)
+            if (selected.second == "commercial_storage_locations") {
+                Text(
+                    "مهم: مواقع التخزين تنظّم أماكن الأصناف فقط. أرصدة المواقع ليست كميات متاحة للبيع ولا مرجعًا للجرد أو تقييم المخزون؛ رصيد الفرع هو المرجع المعتمد.",
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            } else {
+                Text("بيانات محفوظة في المؤسسة السحابية، وليست بيانات محلية.", color = Color(0xFF71817B), fontSize = 12.sp)
+            }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(
                 onClick = {

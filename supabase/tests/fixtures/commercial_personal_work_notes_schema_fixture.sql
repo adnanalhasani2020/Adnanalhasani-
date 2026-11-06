@@ -14,6 +14,6 @@ CREATE TABLE public.commercial_organization_members(
 );
 CREATE TABLE public.commercial_user_notifications(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid NOT NULL,organization_id uuid,
- notification_type text NOT NULL,title text NOT NULL,body text NOT NULL DEFAULT '',
- entity_type text,entity_id uuid,priority text NOT NULL DEFAULT 'normal',metadata jsonb NOT NULL DEFAULT '{}'::jsonb
+ notification_type text NOT NULL,CONSTRAINT commercial_user_notifications_notification_type_check CHECK (notification_type = ANY (ARRAY['order','payment','booking','account_access','approval','system','security','message']::text[])),title text NOT NULL,CONSTRAINT commercial_user_notifications_title_check CHECK (length(btrim(title)) BETWEEN 1 AND 180),body text NOT NULL DEFAULT '' CONSTRAINT commercial_user_notifications_body_check CHECK (length(body)<=4000),
+ entity_type text,entity_id uuid,priority text NOT NULL DEFAULT 'normal' CONSTRAINT commercial_user_notifications_priority_check CHECK (priority = ANY (ARRAY['low','normal','high','urgent']::text[])),metadata jsonb NOT NULL DEFAULT '{}'::jsonb CONSTRAINT commercial_user_notifications_metadata_check CHECK (jsonb_typeof(metadata)='object')
 );

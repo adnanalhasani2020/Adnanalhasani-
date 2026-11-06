@@ -19,6 +19,7 @@ permissions:
 
 jobs:
   postgres-storage-smoke:
+    timeout-minutes: 10
     name: PostgreSQL 17 storage allocation and transfer test
     runs-on: ubuntu-latest
     services:
@@ -45,19 +46,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install PostgreSQL client
+      - name: Resolve PostgreSQL service container
         run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          PG_CONTAINER_ID="$(docker ps --filter 'ancestor=postgres:17' --format '{{.ID}}' | head -n 1)"
+          test -n "$PG_CONTAINER_ID"
+          echo "PG_CONTAINER_ID=$PG_CONTAINER_ID" >> "$GITHUB_ENV"
 
       - name: Load data-free production-shaped schema fixture
-        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_inventory_storage_schema_fixture.sql
+        run: docker exec -i "$PG_CONTAINER_ID" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/fixtures/commercial_inventory_storage_schema_fixture.sql
 
       - name: Apply storage-location ledger migration
-        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106100000_commercial_inventory_storage_transfers.sql
+        run: docker exec -i "$PG_CONTAINER_ID" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/held-migrations/storage/20261106100000_commercial_inventory_storage_transfers.sql
 
       - name: Apply reserved-stock allocation guard
-        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106110000_commercial_inventory_storage_reservation_guard.sql
+        run: docker exec -i "$PG_CONTAINER_ID" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/held-migrations/storage/20261106110000_commercial_inventory_storage_reservation_guard.sql
 
       - name: Exercise permissions, reserved-stock guard, idempotency, transfer, and immutability
-        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_inventory_storage_transfer_smoke.sql
+        run: docker exec -i "$PG_CONTAINER_ID" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/database/commercial_inventory_storage_transfer_smoke.sql

@@ -1,5 +1,15 @@
 BEGIN;
 
+ALTER TABLE public.commercial_user_notifications
+  DROP CONSTRAINT IF EXISTS commercial_user_notifications_notification_type_check;
+ALTER TABLE public.commercial_user_notifications
+  ADD CONSTRAINT commercial_user_notifications_notification_type_check
+  CHECK (notification_type = ANY (ARRAY[
+    'order','payment','booking','account_access','approval','system','security','message','reminder'
+  ]::text[]));
+
+
+
 -- Stock reservations are a commitment against sellable quantity, not a physical
 -- stock movement. on-hand remains unchanged until the existing checkout RPC posts
 -- the actual sale and inventory movement.

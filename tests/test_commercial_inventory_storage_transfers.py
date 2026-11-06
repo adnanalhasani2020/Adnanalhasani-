@@ -3,7 +3,7 @@ import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase/migrations/20261106100000_commercial_inventory_storage_transfers.sql"
+MIGRATION = ROOT / "supabase/held-migrations/storage/20261106100000_commercial_inventory_storage_transfers.sql"
 
 
 class CommercialInventoryStorageTransferTests(unittest.TestCase):
@@ -46,6 +46,13 @@ class CommercialInventoryStorageTransferTests(unittest.TestCase):
         self.assertIn("GRANT SELECT ON public.commercial_inventory_storage_balances", self.sql)
         self.assertIn("GRANT EXECUTE ON FUNCTION public.commercial_transfer_inventory_storage_location", self.sql)
 
+
+
+    def test_storage_location_screen_warns_bins_are_not_sellable_or_valuation_source(self):
+        screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MasterDataScreen.kt").read_text(encoding="utf-8")
+        self.assertIn("أرصدة المواقع ليست كميات متاحة للبيع", screen)
+        self.assertIn("ولا مرجعًا للجرد أو تقييم المخزون", screen)
+        self.assertIn("رصيد الفرع هو المرجع المعتمد", screen)
 
     def test_storage_quantities_preserve_fractional_inventory_precision(self):
         self.assertIn("quantity_on_hand numeric(20,6)", self.sql)
