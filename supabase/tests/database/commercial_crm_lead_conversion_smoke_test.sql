@@ -75,6 +75,19 @@ BEGIN
   RAISE EXCEPTION 'existing_customer_was_not_reused';
  END IF;
 
+ -- Multiple exact matches are rejected for manual resolution, never silently merged.
+ INSERT INTO public.commercial_customers(id,organization_id,display_name,email,phone,created_by) VALUES
+  ('40000000-0000-0000-0000-000000000022',org_id,'تكرار 1','ambiguous@example.test','777000010',manager_id),
+  ('40000000-0000-0000-0000-000000000023',org_id,'تكرار 2','ambiguous@example.test','777000011',manager_id);
+ lead_result:=public.commercial_crm_lead_create(org_id,activity_id,'عميل ملتبس','','ambiguous@example.test','',
+  'website','',manager_id,NULL,'convert-lead-ambiguous-0001');
+ BEGIN
+  PERFORM public.commercial_crm_lead_convert((lead_result->>'id')::uuid,1,'convert-ambiguous-customer-0001');
+  RAISE EXCEPTION 'ambiguous_customer_match_was_accepted';
+ EXCEPTION WHEN raise_exception THEN
+  IF SQLERRM<>'crm_customer_match_ambiguous' THEN RAISE; END IF;
+ END;
+
  -- Staff can convert their own lead but cannot convert a manager-owned lead.
  PERFORM set_config('request.jwt.claim.sub',staff_id::text,true);
  lead_result:=public.commercial_crm_lead_create(org_id,activity_id,'عميل الموظف','','','777000003',
