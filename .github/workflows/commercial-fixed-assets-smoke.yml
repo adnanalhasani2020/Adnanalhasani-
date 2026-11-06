@@ -53,5 +53,7 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_fixed_assets_schema_fixture.sql
       - name: Apply fixed asset register migration
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106113918_commercial_fixed_assets_register.sql
-      - name: Verify tenant scope, manager permissions, lifecycle, idempotency and depreciation
+      - name: Apply fixed asset movement migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106160000_commercial_fixed_asset_movements.sql
+      - name: Verify tenant scope, manager permissions, lifecycle, idempotency, depreciation and movement history
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_fixed_assets_smoke_test.sql
