@@ -149,7 +149,9 @@ BEGIN
   OR has_function_privilege('anon','public.commercial_fixed_asset_maintenance_list(uuid,uuid,text,integer)','EXECUTE')
   OR NOT has_function_privilege('authenticated','public.commercial_fixed_asset_maintenance_list(uuid,uuid,text,integer)','EXECUTE')
   OR has_function_privilege('anon','public.commercial_fixed_asset_maintenance_update(uuid,integer,text,date,text,bigint,text)','EXECUTE')
-  OR NOT has_function_privilege('authenticated','public.commercial_fixed_asset_maintenance_update(uuid,integer,text,date,text,bigint,text)','EXECUTE') THEN
+  OR NOT has_function_privilege('authenticated','public.commercial_fixed_asset_maintenance_update(uuid,integer,text,date,text,bigint,text)','EXECUTE')
+  OR has_function_privilege('anon','public.commercial_fixed_asset_maintenance_guard_asset_disposal()','EXECUTE')
+  OR has_function_privilege('authenticated','public.commercial_fixed_asset_maintenance_guard_asset_disposal()','EXECUTE') THEN
   RAISE EXCEPTION 'maintenance_rpc_grants_invalid';
  END IF;
 END $$;
