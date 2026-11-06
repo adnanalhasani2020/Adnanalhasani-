@@ -48,6 +48,7 @@ internal fun CommercialOpeningInventoryBatchValuationDialog(
     offeringId: String,
     productName: String,
     unitName: String,
+    currencyCode: String,
     uncoveredQuantity: BigDecimal,
     onDismiss: () -> Unit,
     onSaved: () -> Unit
@@ -126,7 +127,7 @@ internal fun CommercialOpeningInventoryBatchValuationDialog(
                                 OutlinedTextField(
                                     value = row.unitCostMinor,
                                     onValueChange = { if (!attempted) row.unitCostMinor = it.filter(Char::isDigit).take(20) },
-                                    label = { Text("تكلفة الوحدة بالوحدة النقدية الصغرى") },
+                                    label = { Text("تكلفة الوحدة بالوحدة الصغرى · $currencyCode") },
                                     modifier = Modifier.fillMaxWidth(),
                                     singleLine = true,
                                     enabled = !attempted
