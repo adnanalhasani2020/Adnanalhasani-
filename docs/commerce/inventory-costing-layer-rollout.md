@@ -54,10 +54,10 @@ The additive migration `20261031110000_inventory_cost_audit_report.sql` exposes 
 
 ## Remaining release work
 
-- Add an audited opening-stock valuation workflow for balances whose cost is unknown; never fabricate historical costs.
+- The audited opening-stock valuation workflow is now implemented for balances with uncovered cost-layer quantities. An owner/admin/manager enters one or more actual lots, each with quantity, verified unit cost, optional lot number, and optional expiry date. The server requires the submitted lot quantities to equal the entire uncovered balance, records immutable source-cost layers, computes the weighted-average snapshot when appropriate, and uses an idempotency key plus audit event. It does not change on-hand quantity or create a second opening movement. Unknown costs are never guessed.
 - Organization-default and current-location costing-method controls are exposed in the cloud stock-alert screen, with server-side role enforcement. The same screen summarizes active cost-layer coverage and flags quantities not covered by known cost layers. The detailed event feed is now available for reporting/export; an in-app export screen and report reconciliation presentation remain.
-- Validate the migrations with authenticated receipt, checkout, partial-return, full-return, and cancellation transactions in a disposable or staging database before production deployment.
+- Complete authenticated acceptance with a real manager account: value a previously uncosted opening balance, receive a supplier lot, sell across multiple lots, partially and fully return quantities to their source cost layers, reject expired/damaged restocking, and verify cancellation reversals and tenant isolation. The PostgreSQL 17 smoke workflow covers the migration contracts; it is not a substitute for end-to-end acceptance.
 
-FIFO/LIFO/weighted-average now have repository-level foundations for receipts, checkout/COGS, returns, and cancellation reversals. Do not deploy these migrations to the live Supabase project until staging transaction tests and release checks are complete.
+FIFO/LIFO/weighted-average now have repository-level foundations for receipts, checkout/COGS, returns, and cancellation reversals. Do not treat a successful migration or APK build as operational acceptance. Keep the opening-valuation and sales/return flows gated until the authenticated acceptance matrix passes.
 
 > LIFO is implemented as a technical valuation option; confirm the applicable accounting standards and local tax rules before using it for statutory reporting.

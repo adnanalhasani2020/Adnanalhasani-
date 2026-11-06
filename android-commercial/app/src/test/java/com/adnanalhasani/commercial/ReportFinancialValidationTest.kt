@@ -151,6 +151,7 @@ class ReportFinancialValidationTest {
         productName = "Product",
         categoryName = "",
         unitName = "unit",
+        currencyCode = "YER",
         availableQuantity = 1.0,
         reorderPoint = 0.0,
         quantityOnHand = BigDecimal.ONE,

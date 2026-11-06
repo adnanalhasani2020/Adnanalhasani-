@@ -119,3 +119,80 @@ BEGIN
   ) THEN RAISE EXCEPTION 'rotation_policy_not_persisted'; END IF;
 END;
 $test$;
+
+
+-- Opening stock with unknown valuation is split into verified physical lots.
+DO $opening$
+DECLARE
+  v_org uuid:='10000000-0000-4000-8000-000000000001';
+  v_location uuid:='20000000-0000-4000-8000-000000000002';
+  v_offering uuid:='30000000-0000-4000-8000-000000000005';
+  v_activity uuid:='30000000-0000-4000-8000-000000000002';
+  v_product uuid:='30000000-0000-4000-8000-000000000003';
+  v_user uuid:='40000000-0000-4000-8000-000000000001';
+  v_result jsonb;
+  v_replay jsonb;
+  v_cost bigint;
+  v_layers integer;
+  v_source_costs jsonb;
+BEGIN
+  PERFORM set_config('request.jwt.claim.sub',v_user::text,false);
+  INSERT INTO public.commercial_organization_locations(id,organization_id,state)
+  VALUES(v_location,v_org,'active');
+  INSERT INTO public.commercial_offerings(id,activity_id,product_id)
+  VALUES(v_offering,v_activity,v_product);
+  INSERT INTO public.commercial_inventory_balances(
+    id,organization_id,location_id,offering_id,quantity_on_hand,quantity_reserved,reorder_point,unit_cost_minor,updated_at
+  ) VALUES(gen_random_uuid(),v_org,v_location,v_offering,50,0,0,NULL,now());
+
+  v_result:=public.commercial_record_opening_inventory_batches(
+    v_org,v_location,v_offering,
+    jsonb_build_array(
+      jsonb_build_object('quantity',20,'unit_cost_minor',100,'batch_number','OPEN-LOT-A','expires_on','2027-03-01'),
+      jsonb_build_object('quantity',30,'unit_cost_minor',200,'batch_number','OPEN-LOT-B','expires_on','2027-06-01')
+    ),
+    'opening-valuation-smoke-01'
+  );
+  IF (v_result->>'valued_quantity')::numeric<>50 OR (v_result->>'covered_quantity')::numeric<>50 THEN
+    RAISE EXCEPTION 'opening_valuation_quantity_mismatch: %',v_result;
+  END IF;
+  SELECT unit_cost_minor INTO v_cost FROM public.commercial_inventory_balances
+  WHERE organization_id=v_org AND location_id=v_location AND offering_id=v_offering;
+  IF v_cost<>160 THEN RAISE EXCEPTION 'opening_weighted_average_cost_mismatch: %',v_cost; END IF;
+  SELECT count(*)::integer,jsonb_agg(source_unit_cost_minor ORDER BY batch_number)
+  INTO v_layers,v_source_costs
+  FROM public.commercial_inventory_cost_layers
+  WHERE organization_id=v_org AND location_id=v_location AND offering_id=v_offering;
+  IF v_layers<>2 OR v_source_costs<>'[100, 200]'::jsonb THEN
+    RAISE EXCEPTION 'opening_batch_layers_missing: count %, costs %',v_layers,v_source_costs;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.commercial_inventory_cost_layers
+    WHERE organization_id=v_org AND location_id=v_location AND offering_id=v_offering
+      AND unit_cost_minor<>160
+  ) THEN RAISE EXCEPTION 'opening_weighted_average_layers_not_revalued'; END IF;
+
+  v_replay:=public.commercial_record_opening_inventory_batches(
+    v_org,v_location,v_offering,
+    jsonb_build_array(
+      jsonb_build_object('quantity',20,'unit_cost_minor',100,'batch_number','OPEN-LOT-A','expires_on','2027-03-01'),
+      jsonb_build_object('quantity',30,'unit_cost_minor',200,'batch_number','OPEN-LOT-B','expires_on','2027-06-01')
+    ),
+    'opening-valuation-smoke-01'
+  );
+  IF v_replay->>'idempotent_replay'<>'true' THEN
+    RAISE EXCEPTION 'opening_valuation_retry_not_idempotent: %',v_replay;
+  END IF;
+
+  BEGIN
+    PERFORM public.commercial_record_opening_inventory_batches(
+      v_org,v_location,v_offering,
+      jsonb_build_array(jsonb_build_object('quantity',49,'unit_cost_minor',100,'batch_number','WRONG','expires_on',NULL)),
+      'opening-valuation-smoke-02'
+    );
+    RAISE EXCEPTION 'opening_valuation_allowed_partial_coverage';
+  EXCEPTION WHEN SQLSTATE '22023' THEN
+    NULL;
+  END;
+END;
+$opening$;
