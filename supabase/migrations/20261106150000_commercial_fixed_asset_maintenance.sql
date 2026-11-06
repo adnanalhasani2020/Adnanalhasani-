@@ -43,6 +43,24 @@ CREATE INDEX commercial_fixed_asset_maintenance_assignee_idx
 ALTER TABLE public.commercial_fixed_asset_maintenance ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.commercial_fixed_asset_maintenance FROM PUBLIC,anon,authenticated;
 
+CREATE OR REPLACE FUNCTION public.commercial_fixed_asset_maintenance_guard_asset_disposal()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $function$
+BEGIN
+ IF NEW.status='disposed' AND OLD.status<>'disposed' AND EXISTS(
+  SELECT 1 FROM public.commercial_fixed_asset_maintenance m
+  WHERE m.organization_id=NEW.organization_id AND m.activity_id=NEW.activity_id
+   AND m.asset_id=NEW.id AND m.status IN('scheduled','in_progress')
+ ) THEN
+  RAISE EXCEPTION 'asset_has_open_maintenance' USING ERRCODE='22023';
+ END IF;
+ RETURN NEW;
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.commercial_fixed_asset_maintenance_guard_asset_disposal() FROM PUBLIC,anon,authenticated;
+CREATE TRIGGER commercial_fixed_asset_maintenance_guard_disposal
+ BEFORE UPDATE OF status ON public.commercial_fixed_assets
+ FOR EACH ROW EXECUTE FUNCTION public.commercial_fixed_asset_maintenance_guard_asset_disposal();
+
 CREATE OR REPLACE FUNCTION public.commercial_fixed_asset_maintenance_create(
  p_organization_id uuid,p_activity_id uuid,p_asset_id uuid,p_maintenance_type text,
  p_title text,p_description text,p_scheduled_date date,p_due_date date,p_assigned_to uuid,
