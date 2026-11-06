@@ -90,6 +90,22 @@ internal fun loadCommercialCloudStockAlerts(context: Context): List<CommercialCl
     val query = "/rest/v1/commercial_inventory_balances" +
         "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,unit_cost_minor,offering:commercial_offerings!inner(id,activity_id,product:commercial_products!inner(name,unit_name,state),categories:commercial_offering_categories(is_primary,category:commercial_product_categories(name_ar,name_en)))" +
         "&organization_id=eq.$orgId&location_id=eq.$locationId&offering.activity_id=eq.$activityId&order=updated_at.desc,offering_id.asc"
+    val batchRows = JSONArray(SupabaseClient.request(
+        "/rest/v1/rpc/commercial_list_inventory_batches", "POST",
+        JSONObject().put("p_organization_id", orgId).put("p_location_id", locationId).put("p_activity_id", activityId),
+        access
+    ))
+    val sellableByOffering = mutableMapOf<String, BigDecimal>()
+    for (index in 0 until batchRows.length()) {
+        val batch = batchRows.optJSONObject(index) ?: continue
+        if (batch.optString("stock_condition") != "sellable") continue
+        val offeringId = batch.optString("offering_id")
+        val quantity = runCatching { BigDecimal(batch.optString("quantity_remaining", "0")) }.getOrNull()
+            ?: throw IllegalStateException("كمية إحدى الدفعات غير صالحة.")
+        if (offeringId.isNotBlank() && quantity.signum() > 0) {
+            sellableByOffering[offeringId] = (sellableByOffering[offeringId] ?: BigDecimal.ZERO).add(quantity)
+        }
+    }
     val rows = commercialCloudPagedGet(query, access)
     return buildList {
         for (index in 0 until rows.length()) {
@@ -117,7 +133,8 @@ internal fun loadCommercialCloudStockAlerts(context: Context): List<CommercialCl
                 productName = product.optString("name").ifBlank { "صنف بدون اسم" },
                 categoryName = categoryName,
                 unitName = product.optString("unit_name").ifBlank { "وحدة" },
-                availableQuantity = onHand.subtract(reserved).toDouble(),
+                availableQuantity = (sellableByOffering[offering.optString("id")] ?: BigDecimal.ZERO)
+                    .subtract(reserved).max(BigDecimal.ZERO).toDouble(),
                 reorderPoint = reorder.toDouble(),
                 quantityOnHand = onHand,
                 unitCostMinor = if (row.isNull("unit_cost_minor")) null else row.optLong("unit_cost_minor")
