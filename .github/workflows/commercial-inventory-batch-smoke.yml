@@ -1,0 +1,58 @@
+name: Commercial inventory batch FIFO FEFO smoke test
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/20261106130000_inventory_batch_expiry_and_rotation.sql'
+      - 'supabase/migrations/20261106131000_inventory_batch_fefo_allocation.sql'
+      - 'supabase/tests/fixtures/commercial_integer_quantity_schema_fixture.sql'
+      - 'supabase/tests/fixtures/commercial_inventory_batch_schema_stubs.sql'
+      - 'supabase/tests/database/commercial_inventory_batch_fefo_smoke_test.sql'
+      - '.github/workflows/commercial-inventory-batch-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-batch-smoke:
+    name: PostgreSQL 17 batch allocation smoke test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Load production-shaped schema and batch stubs
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_integer_quantity_schema_fixture.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_inventory_batch_schema_stubs.sql
+      - name: Apply physical batch metadata and rotation migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106130000_inventory_batch_expiry_and_rotation.sql
+      - name: Apply FIFO FEFO allocation migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106131000_inventory_batch_fefo_allocation.sql
+      - name: Verify receipt metadata and FEFO allocation behavior
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_inventory_batch_fefo_smoke_test.sql
