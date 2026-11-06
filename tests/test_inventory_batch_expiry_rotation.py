@@ -15,6 +15,8 @@ def test_purchase_receiving_persists_physical_batch_metadata_atomically():
     assert "ADD COLUMN IF NOT EXISTS batch_number text" in sql
     assert "ADD COLUMN IF NOT EXISTS expires_on date" in sql
     assert "commercial_sync_receipt_batch_metadata" in sql
+    assert "commercial_list_inventory_batches" in sql
+    assert "GRANT EXECUTE ON FUNCTION public.commercial_list_inventory_batches" in sql
     assert "inventory_receipt_id=NEW.inventory_receipt_id" in sql
     assert "v_batch_number:=nullif(btrim(v_line->>'batch_number'),'')" in sql
     assert "v_expires_on:=nullif(btrim(v_line->>'expires_on'),'')::date" in sql
@@ -58,5 +60,6 @@ def test_android_purchase_and_stock_screens_expose_batch_workflow():
     assert "loadCommercialInventoryRotationPolicy" in inventory
     assert "commercial_set_inventory_rotation_policy" in inventory
     assert "loadCommercialCloudInventoryBatches" in inventory
+    assert "commercial_list_inventory_batches" in inventory
     assert "دفعات المخزون الفعلية" in screen
     assert "FEFO" in screen and "FIFO" in screen
