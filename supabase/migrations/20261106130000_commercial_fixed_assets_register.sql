@@ -182,6 +182,7 @@ BEGIN
  IF v_role NOT IN('owner','admin','manager') THEN RAISE EXCEPTION 'asset_write_permission_required' USING ERRCODE='42501'; END IF;
  IF v_asset.version<>p_expected_version THEN RAISE EXCEPTION 'asset_version_conflict' USING ERRCODE='40001'; END IF;
  IF v_asset.status='disposed' AND p_status<>'disposed' THEN RAISE EXCEPTION 'disposed_asset_is_final' USING ERRCODE='22023'; END IF;
+ IF v_asset.status='active' AND p_status='draft' THEN RAISE EXCEPTION 'active_asset_cannot_return_to_draft' USING ERRCODE='22023'; END IF;
  IF p_location_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM public.commercial_organization_locations l
   WHERE l.id=p_location_id AND l.organization_id=v_asset.organization_id AND l.state='active') THEN
   RAISE EXCEPTION 'asset_location_not_in_organization' USING ERRCODE='42501';
