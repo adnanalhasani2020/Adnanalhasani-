@@ -1,0 +1,57 @@
+name: Commercial fixed assets register and depreciation smoke test
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/20261106130000_commercial_fixed_assets_register.sql'
+      - 'supabase/tests/fixtures/commercial_fixed_assets_schema_fixture.sql'
+      - 'supabase/tests/database/commercial_fixed_assets_smoke_test.sql'
+      - '.github/workflows/commercial-fixed-assets-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fixed-assets:
+    timeout-minutes: 10
+    name: PostgreSQL 17 fixed asset lifecycle and depreciation preview
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Load fixed asset schema fixture
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_fixed_assets_schema_fixture.sql
+      - name: Apply fixed asset register migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106130000_commercial_fixed_assets_register.sql
+      - name: Verify tenant scope, manager permissions, lifecycle, idempotency and depreciation
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_fixed_assets_smoke_test.sql
