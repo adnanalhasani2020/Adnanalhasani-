@@ -30,7 +30,7 @@ def test_fixed_asset_repository_uses_authenticated_rpc_boundary():
 
 
 def test_fixed_asset_database_contract_is_tenant_scoped_and_non_posting():
-    migration = (ROOT / "supabase/migrations/20261106130000_commercial_fixed_assets_register.sql").read_text(encoding="utf-8")
+    migration = (ROOT / "supabase/migrations/20261106113918_commercial_fixed_assets_register.sql").read_text(encoding="utf-8")
     smoke = (ROOT / "supabase/tests/database/commercial_fixed_assets_smoke_test.sql").read_text(encoding="utf-8")
     assert "UNIQUE(organization_id,activity_id,asset_code)" in migration
     assert "ENABLE ROW LEVEL SECURITY" in migration
