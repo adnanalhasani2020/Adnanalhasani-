@@ -379,7 +379,7 @@ internal fun resolvePendingCommercialPurchaseReceipt(context: Context, purchaseO
     return found
 }
 
-internal data class CommercialPurchaseReceiptLineInput(val purchaseOrderItemId: String, val quantity: String)
+internal data class CommercialPurchaseReceiptLineInput(val purchaseOrderItemId: String, val quantity: String, val batchNumber: String = "", val expiresOn: String = "")
 internal data class CommercialPurchaseOrderLineInput(
     val offeringId: String,
     val description: String,
@@ -433,7 +433,16 @@ internal fun receiveCommercialCloudPurchaseOrder(
         ) {
             "كمية الاستلام يجب أن تكون موجبة وعدد صحيح موجب فقط."
         }
-        lineArray.put(JSONObject().put("purchase_order_item_id", line.purchaseOrderItemId).put("quantity", quantity.stripTrailingZeros().toPlainString()))
+        val batchNumber = line.batchNumber.trim()
+        val expiresOn = line.expiresOn.trim()
+        require(batchNumber.length <= 100) { "رقم التشغيلة يجب ألا يتجاوز 100 حرف." }
+        require(expiresOn.isEmpty() || runCatching { java.time.LocalDate.parse(expiresOn) }.isSuccess) {
+            "تاريخ الصلاحية يجب أن يكون بصيغة YYYY-MM-DD."
+        }
+        lineArray.put(JSONObject().put("purchase_order_item_id", line.purchaseOrderItemId)
+            .put("quantity", quantity.stripTrailingZeros().toPlainString())
+            .put("batch_number", batchNumber.takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
+            .put("expires_on", expiresOn.takeIf { it.isNotEmpty() } ?: JSONObject.NULL))
     }
     val (orgId, access) = commercialMasterDataAccess(context)
     return JSONObject(SupabaseClient.request(
