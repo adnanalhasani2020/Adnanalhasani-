@@ -33,7 +33,7 @@ def test_asset_maintenance_database_contract_is_tenant_scoped_and_non_posting():
     assert "FOREIGN KEY(organization_id,activity_id,asset_id)" in migration
     assert "ENABLE ROW LEVEL SECURITY" in migration
     assert "REVOKE ALL ON TABLE public.commercial_fixed_asset_maintenance FROM PUBLIC,anon,authenticated" in migration
-    assert migration.count("SECURITY DEFINER SET search_path = ''") == 3
+    assert migration.count("SECURITY DEFINER SET search_path = ''") == 4
     assert "asset_maintenance_idempotency_key_reused" in migration
     assert "asset_maintenance_version_conflict" in migration
     assert "asset_maintenance_completion_before_schedule" in migration
