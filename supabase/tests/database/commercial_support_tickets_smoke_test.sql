@@ -110,12 +110,16 @@ BEGIN
  IF jsonb_array_length(result)<>0 THEN RAISE EXCEPTION 'reassigned_ticket_visible_to_previous_assignee'; END IF;
 
  PERFORM set_config('request.jwt.claim.sub',manager_id::text,true);
- result:=public.commercial_support_ticket_update(ticket_id,4,'closed','urgent',manager_id);
- IF result->>'status'<>'closed' OR (result->>'version')::integer<>5 THEN
+ result:=public.commercial_support_ticket_message_create(ticket_id,'ملاحظة قبل الإغلاق','support-message-before-close-001');
+ IF result->>'replayed'<>'false' THEN RAISE EXCEPTION 'manager_preclose_message_failed'; END IF;
+ result:=public.commercial_support_ticket_update(ticket_id,5,'closed','urgent',manager_id);
+ IF result->>'status'<>'closed' OR (result->>'version')::integer<>6 THEN
   RAISE EXCEPTION 'manager_close_ticket_failed';
  END IF;
+ result:=public.commercial_support_ticket_message_create(ticket_id,'ملاحظة قبل الإغلاق','support-message-before-close-001');
+ IF result->>'replayed'<>'true' THEN RAISE EXCEPTION 'closed_ticket_message_replay_failed'; END IF;
  BEGIN
-  PERFORM public.commercial_support_ticket_message_create(ticket_id,'رسالة بعد الإغلاق','support-message-closed-001');
+  PERFORM public.commercial_support_ticket_message_create(ticket_id,'رسالة جديدة بعد الإغلاق','support-message-closed-001');
   RAISE EXCEPTION 'closed_ticket_accepted_new_message';
  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
  END;
