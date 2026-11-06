@@ -69,7 +69,7 @@ BEGIN
  SELECT * INTO v_existing FROM public.commercial_crm_lead_conversions c WHERE c.lead_id=p_lead_id;
  IF FOUND THEN
   RETURN jsonb_build_object('id',v_existing.id,'lead_id',p_lead_id,'customer_id',v_existing.customer_id,
-   'reused_existing_customer',true,'already_converted',true,'replayed',true);
+   'reused_existing_customer',v_existing.reused_existing_customer,'already_converted',true,'replayed',true);
  END IF;
  IF v_lead.version<>p_expected_version THEN
   RAISE EXCEPTION 'crm_lead_version_conflict' USING ERRCODE='40001';
