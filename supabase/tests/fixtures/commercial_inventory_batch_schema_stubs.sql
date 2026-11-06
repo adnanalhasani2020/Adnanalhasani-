@@ -20,3 +20,6 @@ CREATE TABLE public.commercial_audit_events (
 CREATE TABLE public.commercial_inventory_costing_policies (
   id uuid, organization_id uuid, location_id uuid, costing_method text
 );
+
+CREATE TABLE public.commercial_activities (id uuid PRIMARY KEY, organization_id uuid, deleted_at timestamptz);
+CREATE TABLE public.commercial_products (id uuid PRIMARY KEY, name text);
