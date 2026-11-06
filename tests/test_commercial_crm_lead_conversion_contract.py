@@ -1,7 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase/migrations/20261106130000_commercial_crm_lead_conversion.sql"
+MIGRATION = ROOT / "supabase/migrations/20261106150000_commercial_crm_lead_conversion.sql"
 FIXTURE = ROOT / "supabase/tests/fixtures/commercial_crm_leads_schema_fixture.sql"
 SMOKE = ROOT / "supabase/tests/database/commercial_crm_lead_conversion_smoke_test.sql"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCrmRepository.kt"
