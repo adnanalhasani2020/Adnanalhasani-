@@ -68,6 +68,16 @@ BEGIN
  IF (v_result->>'status')<>'pending' THEN RAISE EXCEPTION 'customer_resubmission_failed'; END IF;
 
  PERFORM set_config('request.jwt.claim.sub',v_manager::text,true);
+ BEGIN
+  PERFORM public.commercial_merchant_review_customer_payment_request(
+   v_request,'approve',4400,'تأكيد غير مطابق','cash','merchant-approve-mismatch-001'
+  );
+  RAISE EXCEPTION 'mismatched_merchant_amount_was_accepted';
+ EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+ END;
+ SELECT count(*) INTO v_payment_count FROM public.commercial_payments;
+ IF v_payment_count<>1 THEN RAISE EXCEPTION 'mismatched_approval_created_payment'; END IF;
+
  v_result:=public.commercial_merchant_review_customer_payment_request(
   v_request,'approve',4500,'تم استلام الدفعة','cash','merchant-approve-key-001'
  );
