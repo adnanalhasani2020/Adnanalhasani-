@@ -72,10 +72,11 @@ BEGIN
      AND (l.expires_on IS NULL OR l.expires_on>=current_date)
    ORDER BY
      CASE WHEN v_rotation='fefo' THEN l.expires_on END ASC NULLS LAST,
-     CASE WHEN v_rotation='fifo' OR v_rotation='fefo' THEN l.received_at END ASC,
-     CASE WHEN v_method='lifo' AND v_rotation='fifo' THEN l.received_at END DESC,
-     CASE WHEN v_method='lifo' AND v_rotation='fifo' THEN l.id END DESC,
-     CASE WHEN v_rotation='fifo' OR v_rotation='fefo' THEN l.id END ASC
+     CASE WHEN v_rotation='fefo' THEN l.received_at END ASC,
+     CASE WHEN v_rotation='fifo' AND v_method<>'lifo' THEN l.received_at END ASC,
+     CASE WHEN v_rotation='fifo' AND v_method='lifo' THEN l.received_at END DESC,
+     CASE WHEN v_rotation='fifo' AND v_method='lifo' THEN l.id END DESC,
+     CASE WHEN v_rotation='fifo' AND v_method<>'lifo' THEN l.id END ASC
    FOR UPDATE
  LOOP
    EXIT WHEN v_remaining=0;
