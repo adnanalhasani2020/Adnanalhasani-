@@ -32,3 +32,9 @@ The two forward-only migrations are:
 - `20261106131420_opening_inventory_batch_valuation.sql`
 
 Historical stock layers retain their current quantities and costs. Existing layers without lot metadata remain eligible under FIFO; FEFO treats missing expiry as unknown and sorts those layers after known expiry dates. The three forward-only migrations have been applied to the Supabase production project, and the PostgreSQL 17 batch smoke test, Python suite, and Android build passed on the merged candidate. Authenticated end-to-end acceptance remains necessary for a real manager receipt, opening valuation, multi-layer sale, partial/full return, expired/damaged exclusion, and two-tenant isolation.
+
+## Exact partial-return layer restoration
+
+Each new sale cost allocation receives a database-owned sequence within its sale item. A partial resellable return restores the most recently consumed allocation first, so the returned quantity is linked back to the precise original cost layer rather than relying on transaction-stable `created_at` timestamps or random UUID ordering.
+
+Historical allocation rows retain a NULL sequence because their true intra-transaction order cannot be reconstructed from the existing evidence. The return routine keeps the prior deterministic timestamp/UUID fallback for those legacy rows; it does not invent historical sequence data.
