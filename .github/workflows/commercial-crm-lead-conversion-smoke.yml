@@ -10,6 +10,7 @@ on:
     paths:
       - 'supabase/migrations/20261106111004_commercial_crm_leads_followups.sql'
       - 'supabase/migrations/20261106150000_commercial_crm_lead_conversion.sql'
+      - 'supabase/migrations/20261106170000_harden_crm_lead_conversion_match_serialization.sql'
       - 'supabase/tests/fixtures/commercial_crm_leads_schema_fixture.sql'
       - 'supabase/tests/database/commercial_crm_lead_conversion_smoke_test.sql'
       - '.github/workflows/commercial-crm-lead-conversion-smoke.yml'
