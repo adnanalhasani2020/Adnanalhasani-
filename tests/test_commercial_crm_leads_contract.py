@@ -26,6 +26,7 @@ def test_crm_rpc_checks_membership_roles_idempotency_and_optimistic_versions():
         "auth.uid()",
         "m.state='active'",
         "crm_activity_not_available",
+        "crm_organization_not_available",
         "crm_staff_cannot_assign_other_users",
         "crm_lead_idempotency_key_reused",
         "crm_activity_idempotency_key_reused",
