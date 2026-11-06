@@ -37,6 +37,8 @@ def test_asset_maintenance_database_contract_is_tenant_scoped_and_non_posting():
     assert "asset_maintenance_idempotency_key_reused" in migration
     assert "asset_maintenance_version_conflict" in migration
     assert "asset_maintenance_completion_before_schedule" in migration
+    assert "commercial_fixed_asset_maintenance_guard_asset_disposal" in migration
+    assert "asset_has_open_maintenance" in migration
     assert "maintenance_staff_scope_failed" in smoke
     assert "maintenance_for_disposed_asset_was_allowed" in smoke
     assert "maintenance_rls_or_table_privileges_invalid" in smoke
