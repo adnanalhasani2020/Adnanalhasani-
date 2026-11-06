@@ -27,9 +27,9 @@ def test_rotation_policy_is_separate_from_inventory_valuation_policy():
     sql = MIGRATION.read_text(encoding="utf-8")
     allocation = ALLOCATION.read_text(encoding="utf-8")
     assert "commercial_inventory_rotation_policies" in sql
-    assert "rotation_method text NOT NULL DEFAULT 'fifo'" in sql
+    assert "rotation_method text NOT NULL DEFAULT 'fefo'" in sql
     assert "p_rotation_method NOT IN ('fifo','fefo')" in sql
-    assert "v_rotation:=coalesce(v_rotation,'fifo')" in allocation
+    assert "v_rotation:=coalesce(v_rotation,'fefo')" in allocation
     assert "CASE WHEN v_rotation='fefo' THEN l.expires_on END ASC NULLS LAST" in allocation
 
 
