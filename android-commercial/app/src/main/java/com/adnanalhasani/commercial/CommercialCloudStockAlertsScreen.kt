@@ -60,6 +60,7 @@ private val StockAlertsMain = Handler(Looper.getMainLooper())
 internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Unit) {
     var products by remember { mutableStateOf<List<CommercialCloudStockAlert>>(emptyList()) }
     var inventoryBatches by remember { mutableStateOf<List<CommercialCloudInventoryBatch>>(emptyList()) }
+    var batchLoadError by remember { mutableStateOf("") }
     var search by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("all") }
     var loading by remember { mutableStateOf(false) }
@@ -106,7 +107,8 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                     selectedRotationMethod = if (rotationScope == "organization") it.organizationMethod ?: it.effectiveMethod else it.locationMethod ?: it.effectiveMethod
                     rotationError = ""
                 }.onFailure { rotationError = it.message ?: "تعذر تحميل سياسة صرف الدفعات." }
-                batchesResult.onSuccess { inventoryBatches = it }.onFailure { inventoryBatches = emptyList() }
+                batchesResult.onSuccess { inventoryBatches = it; batchLoadError = "" }
+                    .onFailure { inventoryBatches = emptyList(); batchLoadError = it.message ?: "تعذر تحميل دفعات المخزون." }
                 loading = false
             }
         }
