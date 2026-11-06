@@ -3,7 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20261106125821_opening_inventory_batch_valuation.sql"
-SMOKE = ROOT / "supabase/tests/database/commercial_inventory_batch_fefo_smoke_test.sql"
+SMOKE = ROOT / "supabase/tests/database/commercial_inventory_batch_fefo_smoke_test.sql"\nDIALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialOpeningInventoryBatchValuationDialog.kt"\nSCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudStockAlertsScreen.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/InventoryRepository.kt"
 
 
@@ -40,3 +40,15 @@ def test_smoke_covers_multiple_lots_average_cost_and_retries():
     assert "opening_weighted_average_cost_mismatch" in smoke
     assert "opening_valuation_retry_not_idempotent" in smoke
     assert "opening_valuation_allowed_partial_coverage" in smoke
+
+
+def test_android_exposes_manager_opening_batch_valuation_and_exact_coverage():
+    repository = REPOSITORY.read_text(encoding="utf-8")
+    dialog = DIALOG.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8")
+    assert "commercial_record_opening_inventory_batches" in repository
+    assert "unitCostMinor" in repository
+    assert "CommercialOpeningInventoryBatchValuationDialog" in screen
+    assert "تسجيل دفعات وتكلفة الرصيد الافتتاحي" in screen
+    assert "يجب أن يساوي مجموع الدفعات الكمية غير المغطاة تماماً" in dialog
+    assert "إضافة دفعة أخرى" in dialog
