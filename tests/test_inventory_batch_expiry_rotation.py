@@ -31,6 +31,8 @@ def test_rotation_policy_is_separate_from_inventory_valuation_policy():
     assert "p_rotation_method NOT IN ('fifo','fefo')" in sql
     assert "v_rotation:=coalesce(v_rotation,'fefo')" in allocation
     assert "CASE WHEN v_rotation='fefo' THEN l.expires_on END ASC NULLS LAST" in allocation
+    assert "ADD COLUMN IF NOT EXISTS rotation_method text" in allocation
+    assert "costing_method,rotation_method,quantity" in allocation
 
 
 def test_sales_never_consume_expired_or_non_sellable_layers():
