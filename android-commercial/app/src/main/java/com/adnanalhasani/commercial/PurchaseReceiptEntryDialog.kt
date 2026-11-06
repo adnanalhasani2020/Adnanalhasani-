@@ -135,9 +135,14 @@ internal fun PurchaseReceiptEntryDialog(
                                     error = "كمية الاستلام تتجاوز المتبقي للبند ${line.lineNumber}."
                                     return@Button
                                 }
+                                val expiryRaw = expiryDates[line.id].orEmpty().trim()
+                                if (expiryRaw.isNotEmpty() && runCatching { java.time.LocalDate.parse(expiryRaw) }.isFailure) {
+                                    error = "تاريخ الصلاحية للبند ${line.lineNumber} غير صحيح؛ استخدم YYYY-MM-DD."
+                                    return@Button
+                                }
                                 CommercialPurchaseReceiptLineInput(
                                     line.id, quantity.stripTrailingZeros().toPlainString(),
-                                    batchNumbers[line.id].orEmpty(), expiryDates[line.id].orEmpty()
+                                    batchNumbers[line.id].orEmpty(), expiryRaw
                                 )
                             }
                         }
