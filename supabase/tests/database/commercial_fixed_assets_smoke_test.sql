@@ -59,7 +59,7 @@ BEGIN
    'VIN-004','',date '2026-01-01',date '2026-01-15',120000::bigint,20000::bigint,
    NULL,10,'straight_line',location_id,outsider_id,'','asset-create-key-004');
   RAISE EXCEPTION 'inactive_asset_custodian_was_allowed';
- EXCEPTION WHEN check_violation THEN NULL;
+ EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
  END;
 
  -- Staff and viewers can read within their activity, but cannot write.
