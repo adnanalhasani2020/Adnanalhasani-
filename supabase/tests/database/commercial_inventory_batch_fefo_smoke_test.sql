@@ -61,7 +61,7 @@ BEGIN
     RAISE EXCEPTION 'fefo_allocation_order_failed: early %, old %',v_early,v_old;
   END IF;
   v_batches:=public.commercial_list_inventory_batches(v_org,v_location,v_activity);
-  IF jsonb_array_length(v_batches)<>2 OR NOT (v_batches->0 ? 'batch_number') THEN
+  IF jsonb_array_length(v_batches)<>1 OR v_batches->0->>'batch_number'<>'LOT-OLD' THEN
     RAISE EXCEPTION 'member_batch_projection_failed: %',v_batches;
   END IF;
 
