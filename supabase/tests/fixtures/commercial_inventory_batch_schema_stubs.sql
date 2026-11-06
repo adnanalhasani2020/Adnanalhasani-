@@ -14,7 +14,7 @@ CREATE TABLE public.commercial_organization_members (
   organization_id uuid, user_id uuid, state text, role text
 );
 CREATE TABLE public.commercial_audit_events (
-  id uuid, organization_id uuid, actor_user_id uuid, action text, entity_type text,
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, organization_id uuid, actor_user_id uuid, action text, entity_type text,
   entity_id text, metadata jsonb, created_at timestamptz
 );
 CREATE TABLE public.commercial_inventory_costing_policies (
