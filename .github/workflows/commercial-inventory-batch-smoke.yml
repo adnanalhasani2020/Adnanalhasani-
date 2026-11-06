@@ -4,8 +4,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'supabase/migrations/20261106130000_inventory_batch_expiry_and_rotation.sql'
-      - 'supabase/migrations/20261106131000_inventory_batch_fefo_allocation.sql'
+      - 'supabase/migrations/**'
       - 'supabase/tests/fixtures/commercial_integer_quantity_schema_fixture.sql'
       - 'supabase/tests/fixtures/commercial_inventory_batch_schema_stubs.sql'
       - 'supabase/tests/database/commercial_inventory_batch_fefo_smoke_test.sql'
