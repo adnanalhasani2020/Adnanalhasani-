@@ -324,8 +324,10 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                     Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("دفعات المخزون الفعلية", color = StockAlertsInk, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         Text("تظهر الكميات المتبقية لكل دفعة وتاريخ صلاحيتها وحالتها. الدفعات المنتهية أو المحجورة لا تدخل في الصرف.", color = StockAlertsMuted, fontSize = 11.sp)
-                        if (inventoryBatches.isEmpty()) {
-                            Text("لا توجد دفعات مسجلة بكمية متبقية لهذا الموقع، أو أن بيانات الدفعات لم تُحمّل.", color = StockAlertsMuted, fontSize = 11.sp)
+                        if (batchLoadError.isNotBlank()) {
+                            Text("تعذر تحميل بيانات الدفعات: $batchLoadError. حدّث الشاشة أو تحقق من الاتصال والصلاحيات.", color = Color(0xFFB3261E), fontSize = 11.sp)
+                        } else if (inventoryBatches.isEmpty()) {
+                            Text("لا توجد دفعات مسجلة بكمية متبقية لهذا الموقع.", color = StockAlertsMuted, fontSize = 11.sp)
                         } else {
                             inventoryBatches.take(60).forEach { batch ->
                                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
