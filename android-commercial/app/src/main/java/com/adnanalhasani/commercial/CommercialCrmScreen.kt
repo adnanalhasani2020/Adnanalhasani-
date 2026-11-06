@@ -101,6 +101,8 @@ internal fun CommercialCrmScreen(context: Context, onBack: () -> Unit) {
     var error by remember { mutableStateOf("") }
     var refreshToken by remember { mutableIntStateOf(0) }
     var showLeadDialog by remember { mutableStateOf(false) }
+    var savingLead by remember { mutableStateOf(false) }
+    var savingActivity by remember { mutableStateOf(false) }
     var followUpLead by remember { mutableStateOf<CommercialCrmLead?>(null) }
     var pendingLeadKey by remember { mutableStateOf(newCommercialCrmIdempotencyKey()) }
     var pendingActivityKey by remember { mutableStateOf(newCommercialCrmIdempotencyKey()) }
@@ -227,17 +229,20 @@ internal fun CommercialCrmScreen(context: Context, onBack: () -> Unit) {
     if (showLeadDialog) {
         CrmLeadDialog(
             onDismiss = { showLeadDialog = false },
+            saving = savingLead,
             onSave = { name, company, email, phone, source, notes, nextFollowUp ->
+                savingLead = true
                 crmScreenIo.execute {
                     val result = runCatching {
                         createCommercialCrmLead(context, name, company, email, phone, source, notes, nextFollowUp, pendingLeadKey)
                     }
                     crmScreenMain.post {
                         result.onSuccess {
+                            savingLead = false
                             pendingLeadKey = newCommercialCrmIdempotencyKey()
                             showLeadDialog = false
                             refreshToken++
-                        }.onFailure { error = it.message ?: "تعذر حفظ العميل المحتمل." }
+                        }.onFailure { savingLead = false; error = it.message ?: "تعذر حفظ العميل المحتمل." }
                     }
                 }
             }
@@ -248,18 +253,21 @@ internal fun CommercialCrmScreen(context: Context, onBack: () -> Unit) {
         CrmFollowUpDialog(
             leadName = lead.name,
             onDismiss = { followUpLead = null },
+            saving = savingActivity,
             onSave = { type, title, description, dueAt ->
+                savingActivity = true
                 crmScreenIo.execute {
                     val result = runCatching {
                         createCommercialCrmActivity(context, lead.id, type, title, description, dueAt, pendingActivityKey)
                     }
                     crmScreenMain.post {
                         result.onSuccess {
+                            savingActivity = false
                             pendingActivityKey = newCommercialCrmIdempotencyKey()
                             followUpLead = null
                             selectedTab = 1
                             refreshToken++
-                        }.onFailure { error = it.message ?: "تعذر حفظ المتابعة." }
+                        }.onFailure { savingActivity = false; error = it.message ?: "تعذر حفظ المتابعة." }
                     }
                 }
             }
@@ -383,17 +391,17 @@ private fun CrmLeadDialog(
                 }
                 OutlinedTextField(notes, { notes = it }, label = { Text("ملاحظات") }, minLines = 2)
                 OutlinedButton(onClick = {
-                    chooseCrmDateTime(onSaveContext(), { followUp = it })
+                    chooseCrmDateTime(context, { followUp = it })
                 }, modifier = Modifier.fillMaxWidth()) { Text(if (followUp.isBlank()) "تحديد موعد متابعة" else crmDateLabel(followUp)) }
                 Text("يمكنك إضافة الموعد لاحقًا من سجل العميل.", color = Color(0xFF71817B), fontSize = 11.sp)
             }
         },
         confirmButton = {
-            Button(onClick = { if (name.isNotBlank() && !busy) { busy = true; onSave(name, company, email, phone, source, notes, followUp.ifBlank { null }) } }, enabled = name.isNotBlank() && !busy) {
-                Text(if (busy) "جارٍ الحفظ…" else "حفظ العميل")
+            Button(onClick = { if (name.isNotBlank() && !saving) { onSave(name, company, email, phone, source, notes, followUp.ifBlank { null }) } }, enabled = name.isNotBlank() && !saving) {
+                Text(if (saving) "جارٍ الحفظ…" else "حفظ العميل")
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("إلغاء") } }
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !saving) { Text("إلغاء") } }
     )
 }
 
@@ -433,11 +441,11 @@ private fun CrmFollowUpDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { if (title.isNotBlank() && !busy) { busy = true; onSave(type, title, description, dueAt.ifBlank { null }) } }, enabled = title.isNotBlank() && !busy) {
-                Text(if (busy) "جارٍ الحفظ…" else "حفظ المتابعة")
+            Button(onClick = { if (title.isNotBlank() && !saving) { onSave(type, title, description, dueAt.ifBlank { null }) } }, enabled = title.isNotBlank() && !saving) {
+                Text(if (saving) "جارٍ الحفظ…" else "حفظ المتابعة")
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("إلغاء") } }
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !saving) { Text("إلغاء") } }
     )
 }
 
