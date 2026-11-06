@@ -40,6 +40,7 @@ def test_android_repository_and_screen_expose_conversion_action():
     assert "convertCommercialCrmLead(context, lead, pendingConversionKey)" in screen
     assert "تحويل إلى عميل" in screen
     assert "دون إنشاء سجل مكرر" in screen
+    assert "alreadyConverted ->" in screen
 
 
 def test_postgres_smoke_covers_roles_and_reuse():
