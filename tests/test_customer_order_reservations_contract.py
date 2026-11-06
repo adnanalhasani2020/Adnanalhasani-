@@ -1,7 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase/migrations/20261105140000_commercial_customer_order_reservations.sql"
+MIGRATION = ROOT / "supabase/migrations/20261106102423_commercial_customer_order_reservations_forward_20261106.sql"
 
 
 def test_reservation_is_separate_from_physical_stock_and_tenant_scoped():
