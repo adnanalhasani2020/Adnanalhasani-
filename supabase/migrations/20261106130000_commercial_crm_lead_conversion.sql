@@ -9,6 +9,7 @@ CREATE TABLE public.commercial_crm_lead_conversions (
  converted_by uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
  idempotency_key text NOT NULL CHECK(length(btrim(idempotency_key)) BETWEEN 8 AND 200),
  request_fingerprint text NOT NULL CHECK(length(request_fingerprint)=32),
+ reused_existing_customer boolean NOT NULL DEFAULT false,
  created_at timestamptz NOT NULL DEFAULT now(),
  CONSTRAINT commercial_crm_lead_conversions_lead_fk
   FOREIGN KEY(lead_id,organization_id,activity_id)
@@ -62,7 +63,7 @@ BEGIN
    RAISE EXCEPTION 'crm_lead_conversion_idempotency_conflict' USING ERRCODE='23505';
   END IF;
   RETURN jsonb_build_object('id',v_existing.id,'lead_id',p_lead_id,'customer_id',v_existing.customer_id,
-   'reused_existing_customer',true,'already_converted',true,'replayed',true);
+   'reused_existing_customer',v_existing.reused_existing_customer,'already_converted',true,'replayed',true);
  END IF;
 
  SELECT * INTO v_existing FROM public.commercial_crm_lead_conversions c WHERE c.lead_id=p_lead_id;
@@ -107,10 +108,10 @@ BEGIN
  END IF;
 
  INSERT INTO public.commercial_crm_lead_conversions(
-  organization_id,activity_id,lead_id,customer_id,converted_by,idempotency_key,request_fingerprint
+  organization_id,activity_id,lead_id,customer_id,converted_by,idempotency_key,request_fingerprint,reused_existing_customer
  ) VALUES (
   v_lead.organization_id,v_lead.activity_id,v_lead.id,v_customer_id,v_uid,
-  btrim(p_idempotency_key),v_fingerprint
+  btrim(p_idempotency_key),v_fingerprint,v_reused
  ) RETURNING id INTO v_conversion_id;
 
  INSERT INTO public.commercial_audit_events(
