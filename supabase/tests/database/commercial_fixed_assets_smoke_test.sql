@@ -10,6 +10,7 @@ DECLARE
  activity_id uuid:='30000000-0000-0000-0000-000000000021';
  other_activity_id uuid:='30000000-0000-0000-0000-000000000022';
  location_id uuid:='40000000-0000-0000-0000-000000000021';
+ second_location_id uuid:='40000000-0000-0000-0000-000000000023';
  other_location_id uuid:='40000000-0000-0000-0000-000000000022';
  asset_id uuid; declining_asset_id uuid; result jsonb; rows jsonb;
 BEGIN
@@ -24,7 +25,8 @@ BEGIN
  INSERT INTO public.commercial_activities(id,organization_id,owner_user_id,name) VALUES
   (activity_id,org_id,manager_id,'Main activity'),(other_activity_id,other_org_id,outsider_id,'Other activity');
  INSERT INTO public.commercial_organization_locations(id,organization_id,name) VALUES
-  (location_id,org_id,'المستودع الرئيسي'),(other_location_id,other_org_id,'موقع آخر');
+  (location_id,org_id,'المستودع الرئيسي'),(second_location_id,org_id,'المستودع الفرعي'),
+  (other_location_id,other_org_id,'موقع آخر');
 
  PERFORM set_config('request.jwt.claim.sub',manager_id::text,true);
  result:=public.commercial_fixed_asset_create(org_id,activity_id,'VEH-001','سيارة نقل','مركبات',
@@ -85,6 +87,40 @@ BEGIN
  PERFORM set_config('request.jwt.claim.sub',manager_id::text,true);
  result:=public.commercial_fixed_asset_update(asset_id,1,'active',location_id,staff_id,'أصل مفعل',NULL,NULL);
  IF result->>'status'<>'active' OR (result->>'version')::integer<>2 THEN RAISE EXCEPTION 'asset_activation_failed'; END IF;
+ -- Assignment changes use a separate movement RPC and retain a complete audit trail.
+ PERFORM set_config('request.jwt.claim.sub',staff_id::text,true);
+ BEGIN
+  PERFORM public.commercial_fixed_asset_move(asset_id,2,second_location_id,staff_id,'نقل غير مصرح','asset-move-staff-001');
+  RAISE EXCEPTION 'staff_asset_movement_was_allowed';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+ PERFORM set_config('request.jwt.claim.sub',manager_id::text,true);
+ BEGIN
+  PERFORM public.commercial_fixed_asset_move(asset_id,2,other_location_id,manager_id,'موقع من مؤسسة أخرى','asset-move-cross-org-001');
+  RAISE EXCEPTION 'cross_org_asset_movement_was_allowed';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+ result:=public.commercial_fixed_asset_move(asset_id,2,second_location_id,manager_id,'نقل إلى المستودع الفرعي','asset-move-key-001');
+ IF result->>'replayed'<>'false' OR (result->>'version')::integer<>3 THEN
+  RAISE EXCEPTION 'asset_movement_failed';
+ END IF;
+ result:=public.commercial_fixed_asset_move(asset_id,2,second_location_id,manager_id,'نقل إلى المستودع الفرعي','asset-move-key-001');
+ IF result->>'replayed'<>'true' OR (result->>'version')::integer<>3 THEN
+  RAISE EXCEPTION 'asset_movement_idempotent_replay_failed';
+ END IF;
+ rows:=public.commercial_fixed_asset_movement_list(org_id,activity_id,asset_id,100);
+ IF jsonb_array_length(rows)<>1 OR rows->0->>'to_location_id'<>second_location_id::text
+  OR rows->0->>'from_location_id'<>location_id::text
+  OR rows->0->>'to_custodian_id'<>manager_id::text
+  OR rows->0->>'reason'<>'نقل إلى المستودع الفرعي' THEN
+  RAISE EXCEPTION 'asset_movement_history_failed';
+ END IF;
+ BEGIN
+  PERFORM public.commercial_fixed_asset_update(asset_id,4,'active',second_location_id,manager_id,'',NULL,NULL);
+  RAISE EXCEPTION 'asset_assignment_update_bypassed_movement_log';
+ EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+ END;
+
  rows:=public.commercial_fixed_asset_depreciation_preview(org_id,activity_id,asset_id,600);
  IF jsonb_array_length(rows->'periods')<>10
   OR (rows->>'total_preview_depreciation_minor')::bigint<>100000
@@ -116,9 +152,9 @@ BEGIN
   RAISE EXCEPTION 'double_declining_depreciation_preview_failed';
  END IF;
 
- result:=public.commercial_fixed_asset_update(asset_id,2,'disposed',location_id,staff_id,
+ result:=public.commercial_fixed_asset_update(asset_id,3,'disposed',second_location_id,manager_id,
   'تم الاستبعاد',date '2026-10-01',15000::bigint);
- IF result->>'status'<>'disposed' OR (result->>'version')::integer<>3 THEN RAISE EXCEPTION 'asset_disposal_failed'; END IF;
+ IF result->>'status'<>'disposed' OR (result->>'version')::integer<>4 THEN RAISE EXCEPTION 'asset_disposal_failed'; END IF;
  BEGIN
   PERFORM public.commercial_fixed_asset_depreciation_preview(org_id,activity_id,asset_id,600);
   RAISE EXCEPTION 'disposed_asset_preview_was_allowed';
