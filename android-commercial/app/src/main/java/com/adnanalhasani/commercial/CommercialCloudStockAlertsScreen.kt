@@ -60,6 +60,8 @@ private val StockAlertsMain = Handler(Looper.getMainLooper())
 internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Unit) {
     var products by remember { mutableStateOf<List<CommercialCloudStockAlert>>(emptyList()) }
     var inventoryBatches by remember { mutableStateOf<List<CommercialCloudInventoryBatch>>(emptyList()) }
+    var batchLoadError by remember { mutableStateOf("") }
+    var openingValuationOffering by remember { mutableStateOf<CommercialCloudStockAlert?>(null) }
     var search by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("all") }
     var loading by remember { mutableStateOf(false) }
@@ -106,7 +108,8 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                     selectedRotationMethod = if (rotationScope == "organization") it.organizationMethod ?: it.effectiveMethod else it.locationMethod ?: it.effectiveMethod
                     rotationError = ""
                 }.onFailure { rotationError = it.message ?: "تعذر تحميل سياسة صرف الدفعات." }
-                batchesResult.onSuccess { inventoryBatches = it }.onFailure { inventoryBatches = emptyList() }
+                batchesResult.onSuccess { inventoryBatches = it; batchLoadError = "" }
+                    .onFailure { inventoryBatches = emptyList(); batchLoadError = it.message ?: "تعذر تحميل دفعات المخزون." }
                 loading = false
             }
         }
@@ -409,6 +412,20 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                                 Text("${formatStockQuantity(product.reorderPoint)} ${product.unitName}", color = StockAlertsInk, fontWeight = FontWeight.Medium, fontSize = 14.sp)
                             }
                         }
+                        val coveredQuantity = inventoryBatches.asSequence()
+                            .filter { it.offeringId == product.offeringId }
+                            .fold(java.math.BigDecimal.ZERO) { total, batch -> total.add(batch.quantityRemaining) }
+                        val uncoveredQuantity = product.quantityOnHand.subtract(coveredQuantity).max(java.math.BigDecimal.ZERO)
+                        if (uncoveredQuantity.signum() > 0 && batchLoadError.isBlank()) {
+                            Text(
+                                "رصيد غير مغطى بطبقات تكلفة: ${uncoveredQuantity.stripTrailingZeros().toPlainString()} ${product.unitName}",
+                                color = Color(0xFF9A5B00), fontSize = 11.sp
+                            )
+                            Button(
+                                onClick = { openingValuationOffering = product },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("تسجيل دفعات وتكلفة الرصيد الافتتاحي") }
+                        }
                     }
                 }
             }
@@ -419,6 +436,24 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                 )
             }
         }
+    }
+    openingValuationOffering?.let { selected ->
+        val covered = inventoryBatches.asSequence()
+            .filter { it.offeringId == selected.offeringId }
+            .fold(java.math.BigDecimal.ZERO) { total, batch -> total.add(batch.quantityRemaining) }
+        val uncovered = selected.quantityOnHand.subtract(covered).max(java.math.BigDecimal.ZERO)
+        CommercialOpeningInventoryBatchValuationDialog(
+            context = context,
+            offeringId = selected.offeringId,
+            productName = selected.productName,
+            unitName = selected.unitName,
+            uncoveredQuantity = uncovered,
+            onDismiss = { openingValuationOffering = null },
+            onSaved = {
+                openingValuationOffering = null
+                reloadToken++
+            }
+        )
     }
 }
 
