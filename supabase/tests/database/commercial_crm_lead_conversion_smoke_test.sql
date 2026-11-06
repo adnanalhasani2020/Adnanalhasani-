@@ -46,7 +46,8 @@ BEGIN
   RAISE EXCEPTION 'conversion_idempotent_replay_failed';
  END IF;
  result:=public.commercial_crm_lead_convert(lead_new,1,'convert-new-customer-0002');
- IF (result->>'customer_id')::uuid<>new_customer OR NOT (result->>'already_converted')::boolean THEN
+ IF (result->>'customer_id')::uuid<>new_customer OR NOT (result->>'already_converted')::boolean
+  OR (result->>'reused_existing_customer')::boolean THEN
   RAISE EXCEPTION 'already_converted_lead_created_duplicate';
  END IF;
  IF (SELECT count(*) FROM public.commercial_customers WHERE organization_id=org_id AND external_reference='crm-lead:'||lead_new::text)<>1 THEN
