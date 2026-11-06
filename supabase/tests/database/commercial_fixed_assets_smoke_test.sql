@@ -108,6 +108,16 @@ BEGIN
  IF result->>'replayed'<>'true' OR (result->>'version')::integer<>3 THEN
   RAISE EXCEPTION 'asset_movement_idempotent_replay_failed';
  END IF;
+ BEGIN
+  PERFORM public.commercial_fixed_asset_move(asset_id,2,second_location_id,manager_id,'سبب مختلف','asset-move-key-001');
+  RAISE EXCEPTION 'asset_movement_idempotency_fingerprint_was_not_enforced';
+ EXCEPTION WHEN unique_violation THEN NULL;
+ END;
+ BEGIN
+  PERFORM public.commercial_fixed_asset_move(asset_id,3,second_location_id,manager_id,'لا يوجد تغيير','asset-move-no-change-001');
+  RAISE EXCEPTION 'asset_no_change_movement_was_allowed';
+ EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+ END;
  rows:=public.commercial_fixed_asset_movement_list(org_id,activity_id,asset_id,100);
  IF jsonb_array_length(rows)<>1 OR rows->0->>'to_location_id'<>second_location_id::text
   OR rows->0->>'from_location_id'<>location_id::text
