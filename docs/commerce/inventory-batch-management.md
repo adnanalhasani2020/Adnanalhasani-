@@ -27,7 +27,7 @@ The purchase receipt dialog accepts a lot number and optional expiry date for ea
 ## Migration and release safety
 
 The two forward-only migrations are:
-- `20261106130000_inventory_batch_expiry_and_rotation.sql`
-- `20261106131000_inventory_batch_fefo_allocation.sql`
+- `20261106124452_inventory_batch_expiry_and_rotation.sql`
+- `20261106124500_inventory_batch_fefo_allocation.sql`
 
 Historical stock layers retain their current quantities and costs. Existing layers without lot metadata remain eligible under FIFO; FEFO treats missing expiry as unknown and sorts those layers after known expiry dates. No production migration should be applied until the PostgreSQL 17 batch smoke test, Python suite, and Android build pass, and the live migration history has been reconciled. Authenticated end-to-end acceptance should then cover a supplier receipt, multi-layer sale, partial return to the original layer, expired/damaged exclusion, and two-tenant isolation.

@@ -2,8 +2,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase/migrations/20261106130000_inventory_batch_expiry_and_rotation.sql"
-ALLOCATION = ROOT / "supabase/migrations/20261106131000_inventory_batch_fefo_allocation.sql"
+MIGRATION = ROOT / "supabase/migrations/20261106124452_inventory_batch_expiry_and_rotation.sql"
+ALLOCATION = ROOT / "supabase/migrations/20261106124500_inventory_batch_fefo_allocation.sql"
 PURCHASE_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseRepository.kt"
 RECEIPT_DIALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseReceiptEntryDialog.kt"
 INVENTORY_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/InventoryRepository.kt"
