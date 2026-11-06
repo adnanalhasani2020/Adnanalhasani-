@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -71,7 +72,7 @@ internal fun CommercialSupportTicketsScreen(context:Context,onBack:()->Unit){
    }
    Button(onClick={createOpen=true},enabled=!busy){Text("تذكرة جديدة")}
   }
-  Row(horizontalArrangement=Arrangement.spacedBy(6.dp),modifier=Modifier.fillMaxWidth()){
+  Row(horizontalArrangement=Arrangement.spacedBy(6.dp),modifier=Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())){
    listOf("" to "الكل","open" to "مفتوحة","in_progress" to "قيد المعالجة","waiting_customer" to "بانتظار العميل","resolved" to "تم الحل","closed" to "مغلقة").forEach{(value,label)->
     FilterChip(selected=filter==value,onClick={filter=value},label={Text(label,fontSize=10.sp)})
    }
