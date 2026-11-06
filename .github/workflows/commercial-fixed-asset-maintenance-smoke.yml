@@ -8,7 +8,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'supabase/migrations/20261106130000_commercial_fixed_assets_register.sql'
+      - 'supabase/migrations/20261106113918_commercial_fixed_assets_register.sql'
       - 'supabase/migrations/20261106150000_commercial_fixed_asset_maintenance.sql'
       - 'supabase/tests/fixtures/commercial_fixed_assets_schema_fixture.sql'
       - 'supabase/tests/database/commercial_fixed_asset_maintenance_smoke_test.sql'
@@ -53,7 +53,7 @@ jobs:
       - name: Load fixed asset schema fixture
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_fixed_assets_schema_fixture.sql
       - name: Apply fixed asset register migration
-        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106130000_commercial_fixed_assets_register.sql
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106113918_commercial_fixed_assets_register.sql
       - name: Apply asset maintenance migration
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106150000_commercial_fixed_asset_maintenance.sql
       - name: Verify maintenance assignment, status transitions, tenant isolation and privileges
