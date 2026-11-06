@@ -116,7 +116,7 @@ BEGIN
   RAISE EXCEPTION 'asset_movement_history_failed';
  END IF;
  BEGIN
-  PERFORM public.commercial_fixed_asset_update(asset_id,4,'active',second_location_id,manager_id,'',NULL,NULL);
+  PERFORM public.commercial_fixed_asset_update(asset_id,3,'active',location_id,staff_id,'',NULL,NULL);
   RAISE EXCEPTION 'asset_assignment_update_bypassed_movement_log';
  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
  END;
@@ -135,7 +135,7 @@ BEGIN
  END IF;
 
  BEGIN
-  PERFORM public.commercial_fixed_asset_update(asset_id,2,'draft',location_id,staff_id,'',NULL,NULL);
+  PERFORM public.commercial_fixed_asset_update(asset_id,3,'draft',second_location_id,manager_id,'',NULL,NULL);
   RAISE EXCEPTION 'active_asset_reverted_to_draft';
  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
  END;
@@ -161,7 +161,7 @@ BEGIN
  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
  END;
  BEGIN
-  PERFORM public.commercial_fixed_asset_update(asset_id,3,'active',location_id,staff_id,'',NULL,NULL);
+  PERFORM public.commercial_fixed_asset_update(asset_id,4,'active',second_location_id,manager_id,'',NULL,NULL);
   RAISE EXCEPTION 'disposed_asset_reactivation_was_allowed';
  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
  END;
