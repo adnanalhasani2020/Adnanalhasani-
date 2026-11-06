@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20261106131420_opening_inventory_batch_valuation.sql"
+CONDITION_MIGRATION = ROOT / "supabase/migrations/20261106134449_opening_inventory_batch_condition.sql"
 SMOKE = ROOT / "supabase/tests/database/commercial_inventory_batch_fefo_smoke_test.sql"
 DIALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialOpeningInventoryBatchValuationDialog.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudStockAlertsScreen.kt"
@@ -66,7 +67,7 @@ def test_opening_valuation_displays_the_offering_currency_and_minor_unit_convent
 
 
 def test_opening_valuation_preserves_inspection_condition_and_blocks_expired_lots():
-    sql = MIGRATION.read_text(encoding="utf-8")
+    sql = CONDITION_MIGRATION.read_text(encoding="utf-8")
     smoke = SMOKE.read_text(encoding="utf-8")
     assert "v_stock_condition NOT IN ('sellable','quarantine','damaged','expired')" in sql
     assert "ELSE v_stock_condition END" in sql
