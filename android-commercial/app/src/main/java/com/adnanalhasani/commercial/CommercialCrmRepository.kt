@@ -204,3 +204,84 @@ internal fun updateCommercialCrmActivity(
 }
 
 internal fun newCommercialCrmIdempotencyKey(): String = UUID.randomUUID().toString()
+
+
+internal data class CommercialCrmOpportunity(
+    val id: String,
+    val leadId: String,
+    val leadName: String,
+    val title: String,
+    val stage: String,
+    val probability: Int,
+    val expectedValueMinor: Long,
+    val currencyCode: String,
+    val expectedCloseDate: String,
+    val assignedTo: String,
+    val notes: String,
+    val lostReason: String,
+    val version: Int
+)
+
+internal fun loadCommercialCrmOpportunities(context: Context, stage: String = ""): List<CommercialCrmOpportunity> {
+    val (organizationId, activityId, access) = crmContext(context)
+    val rows = JSONArray(SupabaseClient.request(
+        "/rest/v1/rpc/commercial_crm_opportunity_list", "POST",
+        JSONObject().put("p_organization_id", organizationId).put("p_activity_id", activityId)
+            .put("p_stage", stage.takeIf { it.isNotBlank() } ?: JSONObject.NULL).put("p_limit", 200),
+        access
+    ))
+    return buildList {
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val id = row.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val leadId = row.optString("lead_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val title = row.optString("title").trim()
+            if (id.isBlank() || leadId.isBlank() || title.isBlank()) continue
+            add(CommercialCrmOpportunity(
+                id = id, leadId = leadId, leadName = row.optString("lead_name"),
+                title = title, stage = row.optString("stage"), probability = row.optInt("probability"),
+                expectedValueMinor = row.optLong("expected_value_minor"),
+                currencyCode = row.optString("currency_code", "YER"),
+                expectedCloseDate = row.optString("expected_close_date").takeUnless { it == "null" }.orEmpty(),
+                assignedTo = row.optString("assigned_to"), notes = row.optString("notes"),
+                lostReason = row.optString("lost_reason"), version = row.optInt("version", 1)
+            ))
+        }
+    }
+}
+
+internal fun createCommercialCrmOpportunity(
+    context: Context, leadId: String, title: String, stage: String, probability: Int,
+    expectedValueMinor: Long, expectedCloseDate: String?, notes: String, idempotencyKey: String
+): JSONObject {
+    require(leadId.isNotBlank() && title.isNotBlank() && probability in 0..100 && expectedValueMinor >= 0)
+    val (organizationId, activityId, access) = crmContext(context)
+    return JSONObject(SupabaseClient.request(
+        "/rest/v1/rpc/commercial_crm_opportunity_create", "POST",
+        JSONObject().put("p_organization_id", organizationId).put("p_activity_id", activityId)
+            .put("p_lead_id", leadId).put("p_title", title.trim()).put("p_stage", stage)
+            .put("p_probability", probability).put("p_expected_value_minor", expectedValueMinor)
+            .put("p_currency_code", JSONObject.NULL)
+            .put("p_expected_close_date", expectedCloseDate?.takeIf { it.isNotBlank() } ?: JSONObject.NULL)
+            .put("p_notes", notes.take(4000)).put("p_assigned_to", JSONObject.NULL)
+            .put("p_idempotency_key", idempotencyKey),
+        access
+    ))
+}
+
+internal fun updateCommercialCrmOpportunity(
+    context: Context, opportunity: CommercialCrmOpportunity, stage: String,
+    probability: Int, expectedValueMinor: Long, expectedCloseDate: String?,
+    notes: String, lostReason: String
+): JSONObject {
+    val (_, _, access) = crmContext(context)
+    return JSONObject(SupabaseClient.request(
+        "/rest/v1/rpc/commercial_crm_opportunity_update", "POST",
+        JSONObject().put("p_opportunity_id", opportunity.id)
+            .put("p_expected_version", opportunity.version).put("p_stage", stage)
+            .put("p_probability", probability).put("p_expected_value_minor", expectedValueMinor)
+            .put("p_expected_close_date", expectedCloseDate?.takeIf { it.isNotBlank() } ?: JSONObject.NULL)
+            .put("p_notes", notes.take(4000)).put("p_lost_reason", lostReason.take(1000)),
+        access
+    ))
+}
