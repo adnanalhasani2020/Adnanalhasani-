@@ -225,9 +225,9 @@ BEGIN
   INSERT INTO public.commercial_user_notifications(
     user_id,organization_id,notification_type,title,body,entity_type,entity_id,priority,metadata
   )
-  SELECT m.user_id,v_request.organization_id,'customer_payment_request',
+  SELECT m.user_id,v_request.organization_id,'payment',
     'طلب سند قبض جديد','طلب العميل دفعة بقيمة '||v_request.amount_minor||' '||v_request.currency_code,
-    'customer_payment_request',v_request.id,'high',
+    'payment',v_request.id,'high',
     jsonb_build_object('request_id',v_request.id,'sale_id',v_sale.id,'customer_id',v_sale.customer_id)
   FROM public.commercial_organization_members m
   WHERE m.organization_id=v_request.organization_id AND m.state='active'
@@ -309,9 +309,9 @@ BEGIN
   INSERT INTO public.commercial_user_notifications(
     user_id,organization_id,notification_type,title,body,entity_type,entity_id,priority,metadata
   )
-  SELECT m.user_id,v_request.organization_id,'customer_payment_request',
+  SELECT m.user_id,v_request.organization_id,'payment',
     'تم تعديل طلب سند قبض','أعاد العميل إرسال طلب دفعة بقيمة '||v_request.amount_minor||' '||v_request.currency_code,
-    'customer_payment_request',v_request.id,'high',jsonb_build_object('request_id',v_request.id,'sale_id',v_sale.id)
+    'payment',v_request.id,'high',jsonb_build_object('request_id',v_request.id,'sale_id',v_sale.id)
   FROM public.commercial_organization_members m
   WHERE m.organization_id=v_request.organization_id AND m.state='active'
     AND m.role IN ('owner','admin','manager');
@@ -447,13 +447,13 @@ BEGIN
     INSERT INTO public.commercial_user_notifications(
       user_id,organization_id,notification_type,title,body,entity_type,entity_id,priority,metadata
     ) VALUES(
-      v_customer_uid,v_request.organization_id,'customer_payment_request_'||v_event,
+      v_customer_uid,v_request.organization_id,'payment',
       CASE v_event WHEN 'approved' THEN 'تم اعتماد سند القبض'
         WHEN 'rejected' THEN 'تم رفض طلب سند القبض' ELSE 'طلب التاجر تعديل سند القبض' END,
       CASE v_event WHEN 'approved' THEN 'اعتمد التاجر الدفعة، وتم إنشاء سند القبض.'
         WHEN 'rejected' THEN 'رفض التاجر الطلب: '||btrim(p_review_note)
         ELSE 'طلب التاجر تعديل الطلب: '||btrim(p_review_note) END,
-      'customer_payment_request',v_request.id,
+      'payment',v_request.id,
       CASE WHEN v_event='approved' THEN 'normal' ELSE 'high' END,
       jsonb_build_object('request_id',v_request.id,'status',v_request.status,'payment_id',v_request.payment_id)
     );
