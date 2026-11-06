@@ -50,6 +50,7 @@ def test_return_cost_restoration_keeps_original_cost_layer_linkage():
     assert "v_alloc.cost_layer_id" in sql
     assert "SET quantity_remaining=quantity_remaining+v_take" in sql
     assert "sale_cost_allocation_id" in sql
+    assert "ORDER BY a.created_at DESC,a.id DESC" in sql
 
 
 def test_android_purchase_and_stock_screens_expose_batch_workflow():
