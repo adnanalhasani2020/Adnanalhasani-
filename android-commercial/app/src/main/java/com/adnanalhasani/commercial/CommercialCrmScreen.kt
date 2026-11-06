@@ -204,11 +204,12 @@ internal fun CommercialCrmScreen(context: Context, onBack: () -> Unit) {
                                             }
                                             crmScreenMain.post {
                                                 result.onSuccess { response ->
+                                                    val alreadyConverted = response.optBoolean("already_converted")
                                                     val reused = response.optBoolean("reused_existing_customer")
-                                                    conversionNotice = if (reused) {
-                                                        "تم ربط «${lead.name}» بعميل موجود دون إنشاء سجل مكرر."
-                                                    } else {
-                                                        "تم تحويل «${lead.name}» إلى سجل عميل جديد."
+                                                    conversionNotice = when {
+                                                        alreadyConverted -> "تم تأكيد التحويل السابق لـ«${lead.name}» دون إنشاء سجل مكرر."
+                                                        reused -> "تم ربط «${lead.name}» بعميل موجود دون إنشاء سجل مكرر."
+                                                        else -> "تم تحويل «${lead.name}» إلى سجل عميل جديد."
                                                     }
                                                     pendingConversionKey = newCommercialCrmIdempotencyKey()
                                                     refreshToken++
