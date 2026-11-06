@@ -23,3 +23,5 @@ CREATE TABLE public.commercial_inventory_costing_policies (
 
 CREATE TABLE public.commercial_activities (id uuid PRIMARY KEY, organization_id uuid, deleted_at timestamptz);
 CREATE TABLE public.commercial_products (id uuid PRIMARY KEY, name text);
+
+ALTER TABLE public.commercial_inventory_cost_layers ALTER COLUMN id SET DEFAULT gen_random_uuid();
