@@ -64,9 +64,27 @@ internal fun CommercialOpeningInventoryBatchValuationDialog(
         total.add(row.quantity.toBigDecimalOrNull() ?: BigDecimal.ZERO)
     }
     val quantitiesMatch = enteredQuantity.compareTo(uncoveredQuantity) == 0
+    val validationError = drafts.mapIndexedNotNull { index, row ->
+        val quantity = row.quantity.toBigDecimalOrNull()
+        val cost = row.unitCostMinor.toLongOrNull()
+        when {
+            quantity == null -> "أدخل كمية صحيحة للدفعة ${index + 1}."
+            quantity <= BigDecimal.ZERO || quantity.stripTrailingZeros().scale() > 0 ||
+                quantity > BigDecimal("999999999999") -> "كمية الدفعة ${index + 1} يجب أن تكون عدداً صحيحاً موجباً."
+            cost == null || cost < 0L -> "أدخل تكلفة الوحدة بالوحدة الصغرى للدفعة ${index + 1}."
+            row.expiresOn.isNotBlank() && runCatching { java.time.LocalDate.parse(row.expiresOn) }.isFailure ->
+                "تاريخ صلاحية الدفعة ${index + 1} غير صحيح؛ استخدم YYYY-MM-DD."
+            else -> null
+        }
+    }.firstOrNull()
+    val canSubmit = quantitiesMatch && validationError == null
 
     fun submit() {
         if (saving) return
+        if (!attempted && !canSubmit) {
+            error = validationError ?: "يجب أن يساوي مجموع الدفعات الكمية غير المغطاة تماماً."
+            return
+        }
         saving = true
         attempted = true
         error = ""
@@ -167,6 +185,8 @@ internal fun CommercialOpeningInventoryBatchValuationDialog(
                 }
                 if (!quantitiesMatch) {
                     Text("يجب أن يساوي مجموع الدفعات الكمية غير المغطاة تماماً.", fontSize = 11.sp)
+                } else if (validationError != null) {
+                    Text(validationError, fontSize = 11.sp)
                 }
                 if (error.isNotBlank()) Text(error, fontSize = 11.sp)
                 if (attempted && !saving) {
@@ -176,7 +196,7 @@ internal fun CommercialOpeningInventoryBatchValuationDialog(
         },
         confirmButton = {
             Button(
-                enabled = !saving && (attempted || quantitiesMatch),
+                enabled = !saving && (attempted || canSubmit),
                 onClick = { submit() }
             ) {
                 Text(if (saving) "جارٍ التسجيل..." else if (attempted) "إعادة المحاولة" else "تسجيل الدفعات")
