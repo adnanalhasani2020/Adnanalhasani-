@@ -1,4 +1,4 @@
-\\set ON_ERROR_STOP on
+\set ON_ERROR_STOP on
 DO $$
 DECLARE
  v_manager uuid:='10000000-0000-0000-0000-000000000001';
