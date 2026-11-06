@@ -199,4 +199,47 @@ BEGIN
 END;
 $function$;
 
+
+-- Member-safe batch projection. It intentionally omits acquisition costs so
+-- cashiers can inspect lot availability without granting direct cost-layer reads.
+CREATE OR REPLACE FUNCTION public.commercial_list_inventory_batches(
+  p_organization_id uuid,p_location_id uuid,p_activity_id uuid
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
+SET search_path TO 'pg_catalog','public','commercial_private'
+AS $function$
+DECLARE v_result jsonb;
+BEGIN
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
+  IF p_organization_id IS NULL OR p_location_id IS NULL OR p_activity_id IS NULL THEN
+    RAISE EXCEPTION 'inventory_batch_scope_required' USING ERRCODE='22023';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.commercial_organization_members m
+    WHERE m.organization_id=p_organization_id AND m.user_id=auth.uid() AND m.state='active'
+  ) THEN RAISE EXCEPTION 'organization_access_denied' USING ERRCODE='42501'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.commercial_organization_locations l
+    WHERE l.id=p_location_id AND l.organization_id=p_organization_id AND l.state='active'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM public.commercial_activities a
+    WHERE a.id=p_activity_id AND a.organization_id=p_organization_id AND a.deleted_at IS NULL
+  ) THEN RAISE EXCEPTION 'inventory_batch_scope_mismatch' USING ERRCODE='42501'; END IF;
+  SELECT coalesce(jsonb_agg(jsonb_build_object(
+    'id',l.id,'offering_id',l.offering_id,'product_name',p.name,
+    'batch_number',l.batch_number,'received_at',l.received_at,'expires_on',l.expires_on,
+    'quantity_remaining',l.quantity_remaining,'stock_condition',
+      CASE WHEN l.expires_on IS NOT NULL AND l.expires_on<current_date THEN 'expired' ELSE l.stock_condition END
+  ) ORDER BY l.expires_on ASC NULLS LAST,l.received_at ASC,l.id ASC),'[]'::jsonb)
+  INTO v_result
+  FROM public.commercial_inventory_cost_layers l
+  JOIN public.commercial_offerings o ON o.id=l.offering_id AND o.activity_id=p_activity_id
+  JOIN public.commercial_products p ON p.id=o.product_id
+  WHERE l.organization_id=p_organization_id AND l.location_id=p_location_id
+    AND l.quantity_remaining>0;
+  RETURN v_result;
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.commercial_list_inventory_batches(uuid,uuid,uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.commercial_list_inventory_batches(uuid,uuid,uuid) TO authenticated;
+
 COMMIT;
