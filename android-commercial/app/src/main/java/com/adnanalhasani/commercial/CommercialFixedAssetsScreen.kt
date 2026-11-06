@@ -202,11 +202,47 @@ internal fun CommercialFixedAssetsScreen(context:Context,onBack:()->Unit){
   var notes by remember(asset.id,asset.version){mutableStateOf(asset.notes)}
   var disposalDate by remember(asset.id,asset.version){mutableStateOf(todayAssetDate())}
   var proceeds by remember(asset.id,asset.version){mutableStateOf("")}
+  var selectedLocation by remember(asset.id,asset.version){mutableStateOf(asset.locationId)}
+  var selectedCustodian by remember(asset.id,asset.version){mutableStateOf(asset.custodianId)}
+  var movementReason by remember(asset.id,asset.version){mutableStateOf("")}
+  var locationMenu by remember{mutableStateOf(false)};var custodianMenu by remember{mutableStateOf(false)}
   var localError by remember{mutableStateOf("")}
   AlertDialog(onDismissRequest={if(!busy)updateTarget=null},title={Text(if(asset.status=="draft")"تفعيل الأصل" else if(asset.status=="active")"إدارة الأصل" else "تفاصيل الأصل")},
    text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
     Text(asset.name+" • "+asset.code,fontWeight=FontWeight.SemiBold,color=AssetInk)
     OutlinedTextField(notes,{notes=it.take(4000)},label={Text("ملاحظات")},modifier=Modifier.fillMaxWidth(),minLines=2)
+    if(asset.status!="disposed"){
+     Box{
+      OutlinedButton(onClick={locationMenu=true},modifier=Modifier.fillMaxWidth()){
+       Text("الموقع: "+(locations.firstOrNull{it.id==selectedLocation}?.name?:if(selectedLocation.isBlank())"بدون موقع" else selectedLocation.take(8)))
+      }
+      DropdownMenu(locationMenu,{locationMenu=false}){
+       DropdownMenuItem(text={Text("بدون موقع")},onClick={selectedLocation="";locationMenu=false})
+       locations.forEach{loc->DropdownMenuItem(text={Text(loc.name)},onClick={selectedLocation=loc.id;locationMenu=false})}
+      }
+     }
+     Box{
+      OutlinedButton(onClick={custodianMenu=true},modifier=Modifier.fillMaxWidth()){
+       Text("المسؤول: "+(custodians.firstOrNull{it.userId==selectedCustodian}?.label?:if(selectedCustodian.isBlank())"بدون مسؤول" else selectedCustodian.take(8)))
+      }
+      DropdownMenu(custodianMenu,{custodianMenu=false}){
+       DropdownMenuItem(text={Text("بدون مسؤول")},onClick={selectedCustodian="";custodianMenu=false})
+       custodians.forEach{member->DropdownMenuItem(text={Text(member.label)},onClick={selectedCustodian=member.userId;custodianMenu=false})}
+      }
+     }
+     OutlinedTextField(movementReason,{movementReason=it.take(500)},label={Text("سبب نقل الأصل أو تغيير المسؤول")},modifier=Modifier.fillMaxWidth(),minLines=2)
+     Button(
+      onClick={
+       busy=true;localError=""
+       assetIo.execute{
+        val r=runCatching{moveCommercialFixedAsset(context,asset,selectedLocation.takeIf{it.isNotBlank()},selectedCustodian.takeIf{it.isNotBlank()},movementReason,newCommercialFixedAssetMovementKey())}
+        assetMain.post{busy=false;r.onSuccess{notice="تم حفظ حركة الأصل وتحديث موقعه ومسؤوله.";updateTarget=null;refresh++}.onFailure{localError=it.message?:"تعذر حفظ حركة الأصل."}}
+       }
+      },
+      enabled=!busy&&movementReason.isNotBlank()&&(selectedLocation!=asset.locationId||selectedCustodian!=asset.custodianId),
+      modifier=Modifier.fillMaxWidth()
+     ){Text("حفظ الموقع والمسؤول")}
+    }
     if(asset.status=="active"){
      OutlinedButton(onClick={chooseAssetDate(context,disposalDate){disposalDate=it}},modifier=Modifier.fillMaxWidth()){Text("تاريخ الاستبعاد: $disposalDate")}
      OutlinedTextField(proceeds,{proceeds=it.filter(Char::isDigit).take(16)},label={Text("متحصلات الاستبعاد بالوحدة الصغرى")},modifier=Modifier.fillMaxWidth(),singleLine=true)
