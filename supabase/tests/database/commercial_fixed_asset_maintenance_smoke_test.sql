@@ -69,6 +69,11 @@ BEGIN
  result:=public.commercial_fixed_asset_maintenance_create(org_id,activity_id,asset_id,'inspection',
   'فحص شامل','',date '2026-11-15',NULL,manager_id,'',0::bigint,NULL,'','maintenance-key-0003');
  manager_maintenance_id:=(result->>'id')::uuid;
+ BEGIN
+  PERFORM public.commercial_fixed_asset_update(asset_id,2,'disposed',NULL,NULL,'',date '2026-11-20',1000::bigint);
+  RAISE EXCEPTION 'asset_disposed_with_open_maintenance';
+ EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+ END;
  PERFORM set_config('request.jwt.claim.sub',staff_id::text,true);
  rows:=public.commercial_fixed_asset_maintenance_list(org_id,activity_id,NULL,100);
  IF jsonb_array_length(rows)<>1 OR rows->0->>'id'<>maintenance_id::text THEN
