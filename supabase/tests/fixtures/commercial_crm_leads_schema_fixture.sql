@@ -37,7 +37,17 @@ CREATE TABLE public.commercial_activities(
 CREATE TABLE public.commercial_customers(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  organization_id uuid NOT NULL REFERENCES public.commercial_organizations(id),
- display_name text NOT NULL
+ display_name text NOT NULL CHECK(length(btrim(display_name)) BETWEEN 1 AND 200),
+ email text,
+ phone text,
+ external_reference text,
+ notes text,
+ state text NOT NULL DEFAULT 'active' CHECK(state IN('active','inactive')),
+ created_by uuid NOT NULL REFERENCES auth.users(id),
+ auth_user_id uuid REFERENCES auth.users(id),
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(organization_id,external_reference)
 );
 CREATE TABLE public.commercial_audit_events(
  id bigserial PRIMARY KEY,
