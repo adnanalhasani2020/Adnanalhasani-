@@ -28,7 +28,7 @@ def test_asset_maintenance_repository_uses_authenticated_rpcs_and_idempotency():
 
 
 def test_asset_maintenance_database_contract_is_tenant_scoped_and_non_posting():
-    migration = (ROOT / "supabase/migrations/20261106150000_commercial_fixed_asset_maintenance.sql").read_text(encoding="utf-8")
+    migration = (ROOT / "supabase/migrations/20261106160000_commercial_fixed_asset_maintenance.sql").read_text(encoding="utf-8")
     smoke = (ROOT / "supabase/tests/database/commercial_fixed_asset_maintenance_smoke_test.sql").read_text(encoding="utf-8")
     assert "FOREIGN KEY(organization_id,activity_id,asset_id)" in migration
     assert "ENABLE ROW LEVEL SECURITY" in migration
