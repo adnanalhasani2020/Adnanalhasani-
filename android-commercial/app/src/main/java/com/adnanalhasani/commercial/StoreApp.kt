@@ -85,6 +85,7 @@ internal fun StoreApp(context: Context) {
     var commercialCrmPage by remember { mutableStateOf(false) }
     var commercialCrmOpportunitiesPage by remember { mutableStateOf(false) }
     var commercialFixedAssetsPage by remember { mutableStateOf(false) }
+    var commercialAssetMaintenancePage by remember { mutableStateOf(false) }
     var merchantPurchaseRequestPage by remember { mutableStateOf(false) }
     var settlingSaleNumber by remember { mutableIntStateOf(-1) }
     var cloudContextRevision by remember { mutableIntStateOf(0) }
@@ -341,6 +342,7 @@ internal fun StoreApp(context: Context) {
                     commercialCrmPage -> CommercialCrmScreen(context = context, onBack = { commercialCrmPage = false })
                     commercialCrmOpportunitiesPage -> CommercialCrmOpportunitiesScreen(context = context, onBack = { commercialCrmOpportunitiesPage = false })
                     commercialFixedAssetsPage -> CommercialFixedAssetsScreen(context = context, onBack = { commercialFixedAssetsPage = false })
+                    commercialAssetMaintenancePage -> CommercialFixedAssetMaintenanceScreen(context = context, onBack = { commercialAssetMaintenancePage = false })
                     cloudSalesPage -> CommercialCloudSalesScreen(context = context, onBack = { cloudSalesPage = false })
                     cloudPurchasesPage -> CommercialCloudPurchasesScreen(context = context, onBack = { cloudPurchasesPage = false })
                     cloudStockAlertsPage -> CommercialCloudStockAlertsScreen(context = context, onBack = { cloudStockAlertsPage = false })
