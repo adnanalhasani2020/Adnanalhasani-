@@ -70,6 +70,7 @@ def test_merchant_approval_is_the_only_financial_posting_path():
 
 def test_customer_and_merchant_notifications_are_sent_for_state_changes():
     assert "INSERT INTO public.commercial_user_notifications" in SQL
+    assert "'payment'" in SQL
     assert "'customer_payment_request'" in SQL
     assert "'customer_payment_request_'||v_event" in SQL
     assert "commercial_organization_members m" in SQL
