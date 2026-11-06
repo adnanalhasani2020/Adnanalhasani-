@@ -1,0 +1,66 @@
+name: Commercial fixed asset maintenance smoke test
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/20261106113918_commercial_fixed_assets_register.sql'
+      - 'supabase/migrations/20261106160000_commercial_fixed_asset_movements.sql'
+      - 'supabase/tests/database/commercial_fixed_assets_smoke_test.sql'
+      - 'supabase/migrations/20261106170000_commercial_fixed_asset_maintenance.sql'
+      - 'supabase/tests/fixtures/commercial_fixed_assets_schema_fixture.sql'
+      - 'supabase/tests/database/commercial_fixed_asset_maintenance_smoke_test.sql'
+      - '.github/workflows/commercial-fixed-asset-maintenance-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  asset-maintenance:
+    timeout-minutes: 10
+    name: PostgreSQL 17 asset maintenance scheduling and lifecycle
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Load fixed asset schema fixture
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_fixed_assets_schema_fixture.sql
+      - name: Apply fixed asset register migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106113918_commercial_fixed_assets_register.sql
+      - name: Apply fixed asset movement migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106160000_commercial_fixed_asset_movements.sql
+      - name: Verify fixed asset register and movement lifecycle
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_fixed_assets_smoke_test.sql
+      - name: Apply asset maintenance migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106170000_commercial_fixed_asset_maintenance.sql
+      - name: Verify maintenance assignment, status transitions, tenant isolation and privileges
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_fixed_asset_maintenance_smoke_test.sql
