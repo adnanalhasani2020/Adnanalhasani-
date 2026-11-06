@@ -71,7 +71,7 @@ internal fun CommercialSupportTicketsScreen(context:Context,onBack:()->Unit){
     Text("الدعم وخدمة العملاء",fontWeight=FontWeight.Bold,color=supportInk,fontSize=19.sp)
     Text("تسجيل البلاغات ومتابعتها داخل نشاطك",color=supportMuted,fontSize=11.sp)
    }
-   Button(onClick={createOpen=true},enabled=!busy){Text("تذكرة جديدة")}
+   Button(onClick={createOpen=true},enabled=!busy&&role!="viewer"){Text("تذكرة جديدة")}
   }
   Row(horizontalArrangement=Arrangement.spacedBy(6.dp),modifier=Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())){
    listOf("" to "الكل","open" to "مفتوحة","in_progress" to "قيد المعالجة","waiting_customer" to "بانتظار العميل","resolved" to "تم الحل","closed" to "مغلقة").forEach{(value,label)->
@@ -171,7 +171,7 @@ internal fun CommercialSupportTicketsScreen(context:Context,onBack:()->Unit){
     }
     if(localError.isNotBlank())Text(localError,color=MaterialTheme.colorScheme.error,fontSize=11.sp)
    }},
-   confirmButton={Button(enabled=!busy&&subject.isNotBlank()&&description.isNotBlank(),onClick={
+   confirmButton={Button(enabled=!busy&&role!="viewer"&&subject.isNotBlank()&&description.isNotBlank(),onClick={
     busy=true;localError=""
     supportTicketIo.execute{
      val result=runCatching{createCommercialSupportTicket(appContext,customerId.takeIf{it.isNotBlank()},subject,description,category,priority,assignedTo.takeIf{it.isNotBlank()},newCommercialSupportIdempotencyKey())}
@@ -227,7 +227,7 @@ internal fun CommercialSupportTicketsScreen(context:Context,onBack:()->Unit){
      }
     }
     Button(
-     enabled=!busy&&(selectedStatus!=ticket.status||selectedPriority!=ticket.priority||selectedAssignee!=ticket.assignedTo),
+     enabled=!busy&&role!="viewer"&&(selectedStatus!=ticket.status||selectedPriority!=ticket.priority||selectedAssignee!=ticket.assignedTo),
      modifier=Modifier.fillMaxWidth(),
      onClick={
       busy=true;localError=""
@@ -254,7 +254,7 @@ internal fun CommercialSupportTicketsScreen(context:Context,onBack:()->Unit){
     OutlinedTextField(messageText,{messageText=it.take(4000)},label={Text("أضف ملاحظة داخلية")},modifier=Modifier.fillMaxWidth(),minLines=2)
     if(localError.isNotBlank())Text(localError,color=MaterialTheme.colorScheme.error,fontSize=11.sp)
     Button(
-     enabled=!busy&&messageText.isNotBlank()&&ticket.status!="closed",
+     enabled=!busy&&role!="viewer"&&messageText.isNotBlank()&&ticket.status!="closed",
      modifier=Modifier.fillMaxWidth(),
      onClick={
       busy=true;localError=""
