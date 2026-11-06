@@ -58,7 +58,8 @@ CREATE TABLE public.commercial_sales_returns(
 );
 CREATE TABLE public.commercial_user_notifications(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid NOT NULL,organization_id uuid NOT NULL,
- notification_type text NOT NULL,title text NOT NULL,body text NOT NULL,entity_type text NOT NULL,
+ notification_type text NOT NULL CHECK (notification_type IN ('order','payment','booking','account_access','approval','system','security','message','reminder')),
+ title text NOT NULL,body text NOT NULL,entity_type text NOT NULL,
  entity_id uuid NOT NULL,priority text NOT NULL,metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
  created_at timestamptz NOT NULL DEFAULT now()
 );
