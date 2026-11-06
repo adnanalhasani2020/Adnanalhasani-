@@ -63,3 +63,13 @@ def test_opening_valuation_displays_the_offering_currency_and_minor_unit_convent
     assert "currencyCode = selected.currencyCode" in SCREEN.read_text(encoding="utf-8")
     assert "العملة: $currencyCode" in dialog
     assert "الوحدة النقدية الصغرى" in dialog
+
+
+def test_opening_valuation_preserves_inspection_condition_and_blocks_expired_lots():
+    sql = MIGRATION.read_text(encoding="utf-8")
+    smoke = SMOKE.read_text(encoding="utf-8")
+    assert "v_stock_condition NOT IN ('sellable','quarantine','damaged','expired')" in sql
+    assert "ELSE v_stock_condition END" in sql
+    assert "'OPEN-LOT-B','expires_on','2027-06-01','stock_condition','quarantine'" in smoke
+    assert "'OPEN-LOT-C','expires_on','2027-08-01','stock_condition','damaged'" in smoke
+    assert "opening_batch_condition_not_preserved_or_expiry_not_enforced" in smoke
