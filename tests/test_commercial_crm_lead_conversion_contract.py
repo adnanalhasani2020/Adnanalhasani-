@@ -54,6 +54,7 @@ def test_postgres_smoke_covers_roles_and_reuse():
         "conversion_idempotent_replay_failed",
         "already_converted_lead_created_duplicate",
         "existing_customer_was_not_reused",
+        "ambiguous_customer_match_was_accepted",
         "staff_converted_another_users_lead",
         "viewer_converted_lead",
         "outsider_converted_lead",
