@@ -51,6 +51,7 @@ internal fun CommercialFixedAssetsScreen(context:Context,onBack:()->Unit){
  var movementAsset by remember{mutableStateOf<CommercialFixedAsset?>(null)}
  var movementHistory by remember{mutableStateOf<List<CommercialFixedAssetMovement>>(emptyList())}
  var movementLoading by remember{mutableStateOf(false)}
+ var movementError by remember{mutableStateOf("")}
  var loading by remember{mutableStateOf(true)}
  var busy by remember{mutableStateOf(false)}
  var error by remember{mutableStateOf("")}
@@ -132,10 +133,10 @@ internal fun CommercialFixedAssetsScreen(context:Context,onBack:()->Unit){
        },modifier=Modifier.weight(1f),enabled=!busy){Text("معاينة الإهلاك")}
        OutlinedButton(onClick={updateTarget=asset},modifier=Modifier.weight(1f),enabled=!busy){Text(if(asset.status=="draft")"تفعيل الأصل" else if(asset.status=="active")"إدارة الأصل" else "التفاصيل")}
        OutlinedButton(onClick={
-        movementAsset=asset;movementLoading=true;movementHistory=emptyList()
+        movementAsset=asset;movementLoading=true;movementError="";movementHistory=emptyList()
         assetIo.execute{
          val r=runCatching{loadCommercialFixedAssetMovements(context,asset.id)}
-         assetMain.post{movementLoading=false;r.onSuccess{movementHistory=it}.onFailure{error=it.message?:"تعذر تحميل سجل حركة الأصل."}}
+         assetMain.post{movementLoading=false;r.onSuccess{movementHistory=it}.onFailure{movementError=it.message?:"تعذر تحميل سجل حركة الأصل."}}
         }
        },modifier=Modifier.weight(1f),enabled=!busy){Text("سجل النقل")}
       }
@@ -281,7 +282,8 @@ internal fun CommercialFixedAssetsScreen(context:Context,onBack:()->Unit){
    text={
     Column(Modifier.fillMaxWidth().heightIn(max=440.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
      if(movementLoading)LinearProgressIndicator(Modifier.fillMaxWidth())
-     else if(movementHistory.isEmpty())Text("لا توجد حركات نقل مسجلة لهذا الأصل.",color=AssetMuted)
+     if(movementError.isNotBlank())Text(movementError,color=MaterialTheme.colorScheme.error,fontSize=12.sp)
+     else if(!movementLoading&&movementHistory.isEmpty())Text("لا توجد حركات نقل مسجلة لهذا الأصل.",color=AssetMuted)
      else LazyColumn(verticalArrangement=Arrangement.spacedBy(7.dp)){
       items(movementHistory,key={it.id}){move->
        Card(colors=CardDefaults.cardColors(containerColor=Color(0xFFF7FAF8)),border=BorderStroke(1.dp,AssetBorder)){
