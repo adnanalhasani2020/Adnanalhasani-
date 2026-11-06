@@ -63,5 +63,7 @@ def test_android_purchase_and_stock_screens_expose_batch_workflow():
     assert "commercial_set_inventory_rotation_policy" in inventory
     assert "loadCommercialCloudInventoryBatches" in inventory
     assert "commercial_list_inventory_batches" in inventory
+    assert "sellableByOffering" in inventory
+    assert "stock_condition" in inventory
     assert "دفعات المخزون الفعلية" in screen
     assert "FEFO" in screen and "FIFO" in screen
