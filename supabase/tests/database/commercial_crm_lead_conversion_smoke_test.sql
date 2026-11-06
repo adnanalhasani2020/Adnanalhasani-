@@ -70,7 +70,7 @@ BEGIN
 
  -- Staff can convert their own lead but cannot convert a manager-owned lead.
  lead_result:=public.commercial_crm_lead_create(org_id,activity_id,'عميل الموظف','','','777000003',
-  'phone','','',NULL,'convert-lead-staff-0001');
+  'phone','',NULL,NULL,'convert-lead-staff-0001');
  staff_lead:=(lead_result->>'id')::uuid;
  PERFORM set_config('request.jwt.claim.sub',staff_id::text,true);
  BEGIN
