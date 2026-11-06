@@ -1,0 +1,57 @@
+name: Customer payment request migration smoke test
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/20261106140000_customer_payment_confirmation_requests_forward_20261106.sql'
+      - 'supabase/tests/fixtures/customer_payment_requests_schema_fixture.sql'
+      - 'supabase/tests/database/customer_payment_requests_smoke.sql'
+      - '.github/workflows/customer-payment-requests-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  customer-payment-requests:
+    timeout-minutes: 10
+    name: PostgreSQL 17 customer payment request lifecycle and security
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Load isolated commercial payment fixture
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/customer_payment_requests_schema_fixture.sql
+      - name: Apply forward-only payment request migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106140000_customer_payment_confirmation_requests_forward_20261106.sql
+      - name: Verify customer claims, merchant approval, idempotency and isolation
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/customer_payment_requests_smoke.sql
