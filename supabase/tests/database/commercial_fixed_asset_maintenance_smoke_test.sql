@@ -59,6 +59,12 @@ BEGIN
  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
  END;
 
+ BEGIN
+  PERFORM public.commercial_fixed_asset_maintenance_create(org_id,activity_id,asset_id,'inspection',
+   'تعيين للمشاهد','',date '2026-11-15',NULL,viewer_id,'',0::bigint,NULL,'','maintenance-viewer-assignment-01');
+  RAISE EXCEPTION 'viewer_maintenance_assignment_was_allowed';
+ EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+ END;
  -- Manager can create an additional task assigned to self; staff only sees assigned tasks.
  result:=public.commercial_fixed_asset_maintenance_create(org_id,activity_id,asset_id,'inspection',
   'فحص شامل','',date '2026-11-15',NULL,manager_id,'',0::bigint,NULL,'','maintenance-key-0003');
