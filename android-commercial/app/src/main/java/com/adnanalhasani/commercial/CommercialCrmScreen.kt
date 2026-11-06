@@ -366,8 +366,12 @@ private fun CrmLeadCard(lead: CommercialCrmLead, converting: Boolean, onFollowUp
             if (lead.notes.isNotBlank()) Text(lead.notes, color = Color(0xFF52665F), fontSize = 12.sp)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = onFollowUp, enabled = !converting) { Text("إضافة متابعة") }
-                Button(onClick = onConvert, enabled = !converting) {
-                    Text(if (converting) "جارٍ التحويل…" else "تحويل إلى عميل")
+                if (lead.convertedCustomerId.isBlank()) {
+                    Button(onClick = onConvert, enabled = !converting) {
+                        Text(if (converting) "جارٍ التحويل…" else "تحويل إلى عميل")
+                    }
+                } else {
+                    Text("تم التحويل إلى عميل", color = Color(0xFF167D63), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                 }
             }
         }
