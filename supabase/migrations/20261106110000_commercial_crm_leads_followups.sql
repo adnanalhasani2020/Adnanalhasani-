@@ -71,6 +71,10 @@ BEGIN
  IF p_organization_id IS NULL OR p_activity_id IS NULL THEN
   RAISE EXCEPTION 'crm_context_required' USING ERRCODE='22023';
  END IF;
+ IF NOT EXISTS (
+  SELECT 1 FROM public.commercial_organizations o
+  WHERE o.id=p_organization_id AND o.state='active' AND o.deleted_at IS NULL
+ ) THEN RAISE EXCEPTION 'crm_organization_not_available' USING ERRCODE='42501'; END IF;
  SELECT m.role INTO v_role
  FROM public.commercial_organization_members m
  WHERE m.organization_id=p_organization_id AND m.user_id=v_uid AND m.state='active';
