@@ -86,7 +86,7 @@ BEGIN
  IF v_payment_count<>2 THEN RAISE EXCEPTION 'approval_replay_duplicated_payment'; END IF;
 
  -- Customer and merchant histories contain immutable transition events and notifications.
- IF (SELECT count(*) FROM public.commercial_customer_payment_request_events WHERE request_id=v_request)<>3 THEN
+ IF (SELECT count(*) FROM public.commercial_customer_payment_request_events WHERE request_id=v_request)<>4 THEN
   RAISE EXCEPTION 'payment_request_event_history_incomplete';
  END IF;
  IF (SELECT count(*) FROM public.commercial_user_notifications WHERE entity_id=v_request)<3 THEN
