@@ -4,6 +4,8 @@ DECLARE
   v_org uuid:='10000000-0000-4000-8000-000000000001';
   v_location uuid:='20000000-0000-4000-8000-000000000001';
   v_offering uuid:='30000000-0000-4000-8000-000000000001';
+  v_activity uuid:='30000000-0000-4000-8000-000000000002';
+  v_product uuid:='30000000-0000-4000-8000-000000000003';
   v_user uuid:='40000000-0000-4000-8000-000000000001';
   v_sale uuid:='50000000-0000-4000-8000-000000000001';
   v_item uuid:='60000000-0000-4000-8000-000000000001';
@@ -11,13 +13,16 @@ DECLARE
   v_early_layer uuid:='70000000-0000-4000-8000-000000000002';
   v_receipt uuid:='80000000-0000-4000-8000-000000000001';
   v_alloc jsonb;
+  v_batches jsonb;
   v_early numeric;
   v_old numeric;
 BEGIN
   INSERT INTO auth.users(id) VALUES(v_user);
   INSERT INTO public.commercial_organizations(id) VALUES(v_org);
   INSERT INTO public.commercial_organization_locations(id,organization_id,state) VALUES(v_location,v_org,'active');
-  INSERT INTO public.commercial_offerings(id) VALUES(v_offering);
+  INSERT INTO public.commercial_activities(id,organization_id,deleted_at) VALUES(v_activity,v_org,NULL);
+  INSERT INTO public.commercial_products(id,name) VALUES(v_product,'Test Product');
+  INSERT INTO public.commercial_offerings(id,activity_id,product_id) VALUES(v_offering,v_activity,v_product);
   INSERT INTO public.commercial_organization_members(organization_id,user_id,state,role) VALUES(v_org,v_user,'active','manager');
   PERFORM set_config('request.jwt.claim.sub',v_user::text,false);
 
@@ -51,6 +56,10 @@ BEGIN
     WHERE sale_item_id=v_item AND cost_layer_id=v_old_layer;
   IF v_early<>3 OR v_old<>1 THEN
     RAISE EXCEPTION 'fefo_allocation_order_failed: early %, old %',v_early,v_old;
+  END IF;
+  v_batches:=public.commercial_list_inventory_batches(v_org,v_location,v_activity);
+  IF jsonb_array_length(v_batches)<>2 OR NOT (v_batches->0 ? 'batch_number') THEN
+    RAISE EXCEPTION 'member_batch_projection_failed: %',v_batches;
   END IF;
 
   -- Receipt-item metadata must be copied to the exact cost layer created by that receipt.
