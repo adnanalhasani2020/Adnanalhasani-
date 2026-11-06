@@ -103,7 +103,8 @@ SET search_path TO 'pg_catalog','public','commercial_private'
 AS $function$
 BEGIN
   UPDATE public.commercial_inventory_cost_layers
-  SET batch_number=NEW.batch_number,expires_on=NEW.expires_on
+  SET batch_number=NEW.batch_number,expires_on=NEW.expires_on,
+      stock_condition=CASE WHEN NEW.expires_on IS NOT NULL AND NEW.expires_on<current_date THEN 'expired' ELSE 'sellable' END
   WHERE inventory_receipt_id=NEW.inventory_receipt_id
     AND organization_id=NEW.organization_id
     AND location_id=(SELECT r.location_id FROM public.commercial_purchase_receipts r WHERE r.id=NEW.receipt_id)
@@ -163,8 +164,7 @@ BEGIN
      v_expires_on:=nullif(btrim(v_line->>'expires_on'),'')::date;
    EXCEPTION WHEN others THEN RAISE EXCEPTION 'invalid_purchase_receipt_line' USING ERRCODE='22023'; END;
    IF v_item_id IS NULL OR v_qty IS NULL OR v_qty<=0 OR v_qty<>trunc(v_qty) OR v_qty>999999999999
-     OR (v_batch_number IS NOT NULL AND length(v_batch_number)>100)
-     OR (v_expires_on IS NOT NULL AND v_expires_on<current_date) THEN
+     OR (v_batch_number IS NOT NULL AND length(v_batch_number)>100) THEN
      RAISE EXCEPTION 'invalid_purchase_receipt_line' USING ERRCODE='22023';
    END IF;
    IF EXISTS (SELECT 1 FROM public.commercial_purchase_receipt_items WHERE receipt_id=v_receipt_id AND purchase_order_item_id=v_item_id) THEN
