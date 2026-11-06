@@ -100,7 +100,7 @@ internal fun createCommercialCrmLead(
             .put("p_source", source)
             .put("p_notes", notes)
             .put("p_assigned_to", JSONObject.NULL)
-            .put("p_next_follow_up_at", nextFollowUpAt?.let { org.json.JSONObject.quote(it) }?.let { org.json.JSONTokener(it).nextValue() } ?: JSONObject.NULL)
+            .put("p_next_follow_up_at", nextFollowUpAt ?: JSONObject.NULL)
             .put("p_idempotency_key", idempotencyKey),
         access
     ))
@@ -121,7 +121,7 @@ internal fun updateCommercialCrmLead(
             .put("p_expected_version", lead.version)
             .put("p_status", status)
             .put("p_notes", notes)
-            .put("p_next_follow_up_at", nextFollowUpAt?.let { org.json.JSONTokener(JSONObject.quote(it)).nextValue() } ?: JSONObject.NULL)
+            .put("p_next_follow_up_at", nextFollowUpAt ?: JSONObject.NULL)
             .put("p_assigned_to", JSONObject.NULL),
         access
     ))
@@ -178,7 +178,7 @@ internal fun createCommercialCrmActivity(
             .put("p_activity_type", activityType)
             .put("p_title", title.trim())
             .put("p_description", description)
-            .put("p_due_at", dueAt?.let { org.json.JSONTokener(JSONObject.quote(it)).nextValue() } ?: JSONObject.NULL)
+            .put("p_due_at", dueAt ?: JSONObject.NULL)
             .put("p_assigned_to", JSONObject.NULL)
             .put("p_idempotency_key", idempotencyKey),
         access
