@@ -447,6 +447,7 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
             offeringId = selected.offeringId,
             productName = selected.productName,
             unitName = selected.unitName,
+            currencyCode = selected.currencyCode,
             uncoveredQuantity = uncovered,
             onDismiss = { openingValuationOffering = null },
             onSaved = {
