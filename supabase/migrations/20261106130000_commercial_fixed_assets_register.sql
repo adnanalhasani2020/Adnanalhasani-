@@ -173,8 +173,11 @@ BEGIN
   OR length(coalesce(p_notes,''))>4000 OR (p_disposal_proceeds_minor IS NOT NULL AND p_disposal_proceeds_minor<0) THEN
   RAISE EXCEPTION 'invalid_asset_update' USING ERRCODE='22023';
  END IF;
- SELECT * INTO v_asset FROM public.commercial_fixed_assets WHERE id=p_asset_id FOR UPDATE;
- IF NOT FOUND THEN RAISE EXCEPTION 'asset_not_found' USING ERRCODE='P0002'; END IF;
+ SELECT a.* INTO v_asset FROM public.commercial_fixed_assets a
+ JOIN public.commercial_organization_members m ON m.organization_id=a.organization_id
+  AND m.user_id=v_uid AND m.state='active'
+ WHERE a.id=p_asset_id FOR UPDATE OF a;
+ IF NOT FOUND THEN RAISE EXCEPTION 'asset_not_found_or_forbidden' USING ERRCODE='42501'; END IF;
  v_role:=public.commercial_fixed_asset_context_role(v_asset.organization_id,v_asset.activity_id);
  IF v_role NOT IN('owner','admin','manager') THEN RAISE EXCEPTION 'asset_write_permission_required' USING ERRCODE='42501'; END IF;
  IF v_asset.version<>p_expected_version THEN RAISE EXCEPTION 'asset_version_conflict' USING ERRCODE='40001'; END IF;
@@ -190,6 +193,9 @@ BEGIN
  IF p_status='active' AND v_asset.depreciation_start_date IS NULL THEN
   UPDATE public.commercial_fixed_assets SET depreciation_start_date=available_for_use_date
   WHERE id=p_asset_id;
+ END IF;
+ IF p_status='disposed' AND v_asset.status<>'active' THEN
+  RAISE EXCEPTION 'only_active_assets_can_be_disposed' USING ERRCODE='22023';
  END IF;
  IF p_status='disposed' AND (p_disposed_at IS NULL OR p_disposed_at<v_asset.available_for_use_date OR p_disposal_proceeds_minor IS NULL) THEN
   RAISE EXCEPTION 'asset_disposal_details_required' USING ERRCODE='22023';
@@ -216,7 +222,7 @@ BEGIN
  SELECT * INTO v_asset FROM public.commercial_fixed_assets a
  WHERE a.id=p_asset_id AND a.organization_id=p_organization_id AND a.activity_id=p_activity_id;
  IF NOT FOUND THEN RAISE EXCEPTION 'asset_not_found' USING ERRCODE='P0002'; END IF;
- IF v_asset.status='draft' THEN RAISE EXCEPTION 'asset_must_be_active_before_depreciation_preview' USING ERRCODE='22023'; END IF;
+ IF v_asset.status<>'active' THEN RAISE EXCEPTION 'asset_must_be_active_for_depreciation_preview' USING ERRCODE='22023'; END IF;
  v_book:=v_asset.acquisition_cost_minor;v_base:=v_asset.acquisition_cost_minor-v_asset.salvage_value_minor;
  v_rate:=2.0/v_asset.useful_life_months;
  v_period:=date_trunc('month',v_asset.depreciation_start_date)::date;
