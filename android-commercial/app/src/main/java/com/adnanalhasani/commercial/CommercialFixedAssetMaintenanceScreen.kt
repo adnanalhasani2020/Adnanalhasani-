@@ -44,7 +44,7 @@ private fun chooseMaintenanceDate(context:Context,current:String,onSelected:(Str
 @Composable
 internal fun CommercialFixedAssetMaintenanceScreen(context:Context,onBack:()->Unit){
  var assets by remember{mutableStateOf<List<CommercialFixedAsset>>(emptyList())}
- var items by remember{mutableStateOf<List<CommercialFixedAssetMaintenance>>(emptyList())}
+ var maintenanceRows by remember{mutableStateOf<List<CommercialFixedAssetMaintenance>>(emptyList())}
  var loading by remember{mutableStateOf(true)};var busy by remember{mutableStateOf(false)}
  var error by remember{mutableStateOf("")};var notice by remember{mutableStateOf("")}
  var refresh by remember{mutableIntStateOf(0)};var statusFilter by remember{mutableStateOf("")}
@@ -54,7 +54,7 @@ internal fun CommercialFixedAssetMaintenanceScreen(context:Context,onBack:()->Un
   loading=true;error=""
   maintenanceIo.execute{
    val result=runCatching{loadCommercialFixedAssets(context,"active") to loadCommercialFixedAssetMaintenance(context,statusFilter)}
-   maintenanceMain.post{loading=false;result.onSuccess{(a,m)->assets=a;items=m}.onFailure{error=it.message?:"تعذر تحميل جدول الصيانة."}}
+   maintenanceMain.post{loading=false;result.onSuccess{(a,m)->assets=a;maintenanceRows=m}.onFailure{error=it.message?:"تعذر تحميل جدول الصيانة."}}
   }
  }
  Scaffold(containerColor=Color(0xFFF5F7F6),
@@ -68,10 +68,10 @@ internal fun CommercialFixedAssetMaintenanceScreen(context:Context,onBack:()->Un
    item{
     Card(colors=CardDefaults.cardColors(containerColor=Color.White),border=BorderStroke(1.dp,MaintenanceBorder),shape=RoundedCornerShape(16.dp)){
      Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
-      Text("${items.size} طلب صيانة في النشاط الحالي",fontWeight=FontWeight.Bold,color=MaintenanceInk)
+      Text("${maintenanceRows.size} طلب صيانة في النشاط الحالي",fontWeight=FontWeight.Bold,color=MaintenanceInk)
       Row(horizontalArrangement=Arrangement.spacedBy(5.dp)){
        listOf("scheduled","in_progress","completed","cancelled").forEach{s->
-        val n=items.count{it.status==s};if(n>0)AssistChip(onClick={statusFilter=s},label={Text("${maintenanceStatusLabel(s)} $n",fontSize=10.sp)})
+        val n=maintenanceRows.count{it.status==s};if(n>0)AssistChip(onClick={statusFilter=s},label={Text("${maintenanceStatusLabel(s)} $n",fontSize=10.sp)})
        }
       }
       Box{OutlinedButton(onClick={filterMenu=true},modifier=Modifier.fillMaxWidth()){Text("تصفية: "+if(statusFilter.isBlank())"كل الحالات" else maintenanceStatusLabel(statusFilter))}
@@ -87,8 +87,8 @@ internal fun CommercialFixedAssetMaintenanceScreen(context:Context,onBack:()->Un
    if(loading)item{LinearProgressIndicator(Modifier.fillMaxWidth())}
    if(error.isNotBlank())item{Card(colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.errorContainer)){Column(Modifier.padding(12.dp)){Text(error);TextButton(onClick={refresh++}){Text("إعادة المحاولة")}}}}
    if(notice.isNotBlank())item{Text(notice,color=MaintenanceInk,fontSize=12.sp)}
-   if(!loading&&items.isEmpty()&&error.isBlank())item{Text("لا توجد مواعيد صيانة مسجلة.",color=MaintenanceMuted)}
-   items(items,key={it.id}){item->
+   if(!loading&&maintenanceRows.isEmpty()&&error.isBlank())item{Text("لا توجد مواعيد صيانة مسجلة.",color=MaintenanceMuted)}
+   items(maintenanceRows,key={it.id}){item->
     Card(colors=CardDefaults.cardColors(containerColor=Color.White),border=BorderStroke(1.dp,MaintenanceBorder),shape=RoundedCornerShape(16.dp)){
      Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
       Row(verticalAlignment=Alignment.CenterVertically){
@@ -158,7 +158,7 @@ internal fun CommercialFixedAssetMaintenanceScreen(context:Context,onBack:()->Un
     Box{OutlinedButton(onClick={statusMenu=true},modifier=Modifier.fillMaxWidth()){Text("الحالة: "+maintenanceStatusLabel(status))}
      DropdownMenu(statusMenu,{statusMenu=false}){listOf("scheduled","in_progress","completed","cancelled").forEach{s->DropdownMenuItem(text={Text(maintenanceStatusLabel(s))},onClick={status=s;statusMenu=false})}}
     }
-    if(status=="completed")OutlinedButton(onClick={chooseMaintenanceDate(context,completed){completed=it},modifier=Modifier.fillMaxWidth()){Text("تاريخ الإكمال: $completed")}
+    if(status=="completed")OutlinedButton(onClick={chooseMaintenanceDate(context,completed){completed=it}},modifier=Modifier.fillMaxWidth()){Text("تاريخ الإكمال: $completed")}
     OutlinedTextField(vendor,{vendor=it.take(180)},label={Text("مقدم الخدمة")},modifier=Modifier.fillMaxWidth(),singleLine=true)
     OutlinedTextField(cost,{cost=it.filter(Char::isDigit).take(16)},label={Text("التكلفة الفعلية بالوحدة الصغرى")},modifier=Modifier.fillMaxWidth(),singleLine=true)
     OutlinedTextField(notes,{notes=it.take(4000)},label={Text("ملاحظات")},modifier=Modifier.fillMaxWidth(),minLines=2)
