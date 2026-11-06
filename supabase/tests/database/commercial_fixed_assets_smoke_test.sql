@@ -174,11 +174,17 @@ BEGIN
  END;
 
  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid='public.commercial_fixed_assets'::regclass)
+  OR NOT (SELECT relrowsecurity FROM pg_class WHERE oid='public.commercial_fixed_asset_movements'::regclass)
   OR has_table_privilege('anon','public.commercial_fixed_assets','SELECT')
   OR has_table_privilege('authenticated','public.commercial_fixed_assets','SELECT')
   OR has_table_privilege('authenticated','public.commercial_fixed_assets','INSERT')
   OR has_table_privilege('authenticated','public.commercial_fixed_assets','UPDATE')
-  OR has_table_privilege('authenticated','public.commercial_fixed_assets','DELETE') THEN
+  OR has_table_privilege('authenticated','public.commercial_fixed_assets','DELETE')
+  OR has_table_privilege('anon','public.commercial_fixed_asset_movements','SELECT')
+  OR has_table_privilege('authenticated','public.commercial_fixed_asset_movements','SELECT')
+  OR has_table_privilege('authenticated','public.commercial_fixed_asset_movements','INSERT')
+  OR has_table_privilege('authenticated','public.commercial_fixed_asset_movements','UPDATE')
+  OR has_table_privilege('authenticated','public.commercial_fixed_asset_movements','DELETE') THEN
   RAISE EXCEPTION 'asset_rls_or_table_privileges_invalid';
  END IF;
  IF has_function_privilege('anon','public.commercial_fixed_asset_create(uuid,uuid,text,text,text,text,text,date,date,bigint,bigint,text,integer,text,uuid,uuid,text,text)','EXECUTE')
@@ -188,7 +194,11 @@ BEGIN
   OR has_function_privilege('anon','public.commercial_fixed_asset_update(uuid,integer,text,uuid,uuid,text,date,bigint)','EXECUTE')
   OR NOT has_function_privilege('authenticated','public.commercial_fixed_asset_update(uuid,integer,text,uuid,uuid,text,date,bigint)','EXECUTE')
   OR has_function_privilege('anon','public.commercial_fixed_asset_depreciation_preview(uuid,uuid,uuid,integer)','EXECUTE')
-  OR NOT has_function_privilege('authenticated','public.commercial_fixed_asset_depreciation_preview(uuid,uuid,uuid,integer)','EXECUTE') THEN
+  OR NOT has_function_privilege('authenticated','public.commercial_fixed_asset_depreciation_preview(uuid,uuid,uuid,integer)','EXECUTE')
+  OR has_function_privilege('anon','public.commercial_fixed_asset_move(uuid,integer,uuid,uuid,text,text)','EXECUTE')
+  OR NOT has_function_privilege('authenticated','public.commercial_fixed_asset_move(uuid,integer,uuid,uuid,text,text)','EXECUTE')
+  OR has_function_privilege('anon','public.commercial_fixed_asset_movement_list(uuid,uuid,uuid,integer)','EXECUTE')
+  OR NOT has_function_privilege('authenticated','public.commercial_fixed_asset_movement_list(uuid,uuid,uuid,integer)','EXECUTE') THEN
   RAISE EXCEPTION 'asset_rpc_grants_invalid';
  END IF;
 END $$;
