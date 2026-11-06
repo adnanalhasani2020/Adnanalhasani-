@@ -139,7 +139,7 @@ internal fun CommercialCrmOpportunitiesScreen(context:Context,onBack:()->Unit){
     OutlinedTextField(notes,{notes=it.take(4000)},label={Text("ملاحظات")},modifier=Modifier.fillMaxWidth(),minLines=2)
     if(localError.isNotBlank())Text(localError,color=MaterialTheme.colorScheme.error,fontSize=12.sp)
    }},
-   confirmButton={Button(enabled=!busy&&leadId.isNotBlank()&&title.isNotBlank()&&probability.toIntOrNull() in 0..100&&value.toLongOrNull()!=null,onClick={
+   confirmButton={Button(enabled=!busy&&leadId.isNotBlank()&&title.isNotBlank()&&probability.toIntOrNull()?.let { it in 0..100 } == true&&value.toLongOrNull()!=null,onClick={
     busy=true;localError=""
     crmOppIo.execute{val result=runCatching{createCommercialCrmOpportunity(context,leadId,title,stage,probability.toInt(),value.toLong(),closeDate.ifBlank{null},notes,newCommercialCrmIdempotencyKey())}
      crmOppMain.post{busy=false;result.onSuccess{notice="تم تسجيل فرصة المبيعات.";createOpen=false;refresh++}.onFailure{localError=it.message?:"تعذر حفظ الفرصة."}}
