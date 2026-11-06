@@ -1,5 +1,9 @@
 BEGIN;
 
+ALTER TABLE public.commercial_inventory_cost_allocations
+  ADD COLUMN IF NOT EXISTS rotation_method text
+  CHECK (rotation_method IS NULL OR rotation_method IN ('fifo','fefo'));
+
 -- The valuation method (FIFO/LIFO/average) and physical stock rotation
 -- (FIFO/FEFO) are separate decisions. FEFO changes which layer is issued,
 -- while the cost snapshot remains the selected layer's actual source cost.
@@ -80,8 +84,8 @@ BEGIN
    v_take:=least(v_remaining,v_layer.quantity_remaining);
    v_layer_cost:=CASE WHEN v_method='weighted_average' THEN v_balance.unit_cost_minor ELSE v_layer.source_unit_cost_minor END;
    INSERT INTO public.commercial_inventory_cost_allocations(
-     organization_id,location_id,offering_id,sale_id,sale_item_id,cost_layer_id,costing_method,quantity,unit_cost_minor,total_cost_minor
-   ) VALUES(v_org,p_location_id,v_item.offering_id,v_item.sale_id,p_sale_item_id,v_layer.id,v_method,v_take,v_layer_cost,round(v_take*v_layer_cost::numeric));
+     organization_id,location_id,offering_id,sale_id,sale_item_id,cost_layer_id,costing_method,rotation_method,quantity,unit_cost_minor,total_cost_minor
+   ) VALUES(v_org,p_location_id,v_item.offering_id,v_item.sale_id,p_sale_item_id,v_layer.id,v_method,v_rotation,v_take,v_layer_cost,round(v_take*v_layer_cost::numeric));
    UPDATE public.commercial_inventory_cost_layers SET quantity_remaining=quantity_remaining-v_take WHERE id=v_layer.id;
    v_total_cost:=v_total_cost+round(v_take*v_layer_cost::numeric);
    v_remaining:=v_remaining-v_take;
