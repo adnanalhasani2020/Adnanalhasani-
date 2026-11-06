@@ -8,7 +8,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'supabase/migrations/20261106002000_commercial_customer_order_reservations_forward_20261106.sql'
+      - 'supabase/migrations/20261106102423_commercial_customer_order_reservations_forward_20261106.sql'
       - 'supabase/tests/fixtures/customer_order_reservations_schema_fixture.sql'
       - 'supabase/tests/database/customer_order_reservations_smoke_test.sql'
       - '.github/workflows/customer-order-reservation-smoke.yml'
@@ -52,6 +52,6 @@ jobs:
       - name: Load isolated production-shaped reservation fixture
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/customer_order_reservations_schema_fixture.sql
       - name: Apply reservation migration
-        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106002000_commercial_customer_order_reservations_forward_20261106.sql
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106102423_commercial_customer_order_reservations_forward_20261106.sql
       - name: Verify atomic reservation, expiry policies, reminders and fulfillment
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/customer_order_reservations_smoke_test.sql
