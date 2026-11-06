@@ -149,6 +149,58 @@ internal data class CommercialInventoryCostingPolicyState(
     val effectiveMethod: String
 )
 
+internal data class CommercialOpeningInventoryBatchInput(
+    val quantity: String,
+    val unitCostMinor: String,
+    val batchNumber: String = "",
+    val expiresOn: String = ""
+)
+
+internal fun recordCommercialOpeningInventoryBatches(
+    context: Context,
+    offeringId: String,
+    batches: List<CommercialOpeningInventoryBatchInput>,
+    idempotencyKey: String
+): JSONObject {
+    require(offeringId.isNotBlank()) { "الصنف غير محدد." }
+    require(batches.isNotEmpty() && batches.size <= 100) { "أدخل دفعة واحدة على الأقل." }
+    require(idempotencyKey.length in 8..160) { "مفتاح عملية التقييم غير صالح." }
+    val rows = JSONArray()
+    batches.forEachIndexed { index, batch ->
+        val quantity = batch.quantity.toBigDecimalOrNull()
+            ?: throw IllegalArgumentException("كمية الدفعة رقم ${index + 1} غير صالحة.")
+        require(quantity > BigDecimal.ZERO && quantity.stripTrailingZeros().scale() <= 0 &&
+            quantity <= BigDecimal("999999999999")) {
+            "كمية كل دفعة يجب أن تكون عدداً صحيحاً موجباً."
+        }
+        val cost = batch.unitCostMinor.toLongOrNull()
+            ?: throw IllegalArgumentException("تكلفة الدفعة رقم ${index + 1} غير صالحة.")
+        require(cost >= 0L) { "تكلفة الوحدة لا يمكن أن تكون سالبة." }
+        val lot = batch.batchNumber.trim()
+        val expiry = batch.expiresOn.trim()
+        require(lot.length <= 100) { "رقم التشغيلة يجب ألا يتجاوز 100 حرف." }
+        require(expiry.isEmpty() || runCatching { java.time.LocalDate.parse(expiry) }.isSuccess) {
+            "تاريخ الصلاحية يجب أن يكون بصيغة YYYY-MM-DD."
+        }
+        rows.put(JSONObject()
+            .put("quantity", quantity.stripTrailingZeros().toPlainString())
+            .put("unit_cost_minor", cost)
+            .put("batch_number", lot.takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
+            .put("expires_on", expiry.takeIf { it.isNotEmpty() } ?: JSONObject.NULL))
+    }
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val locationId = saved.getString("location_id", null).orEmpty()
+    require(locationId.isNotBlank()) { "اختر موقع المؤسسة قبل تقييم الرصيد الافتتاحي." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    return JSONObject(SupabaseClient.request(
+        "/rest/v1/rpc/commercial_record_opening_inventory_batches", "POST",
+        JSONObject().put("p_organization_id", orgId).put("p_location_id", locationId)
+            .put("p_offering_id", offeringId).put("p_batches", rows)
+            .put("p_idempotency_key", idempotencyKey),
+        access
+    ))
+}
+
 internal data class CommercialCloudInventoryBatch(
     val id: String,
     val offeringId: String,
