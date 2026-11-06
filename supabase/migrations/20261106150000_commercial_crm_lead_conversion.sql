@@ -68,6 +68,7 @@ DECLARE
  v_existing public.commercial_crm_lead_conversions%ROWTYPE;
  v_customer_ids uuid[];
  v_customer_id uuid;
+ v_phone_key text;
  v_reused boolean:=false;
  v_conversion_id uuid;
 BEGIN
@@ -104,6 +105,20 @@ BEGIN
  END IF;
  IF v_lead.version<>p_expected_version THEN
   RAISE EXCEPTION 'crm_lead_version_conflict' USING ERRCODE='40001';
+ END IF;
+
+ -- Serialize matching on each normalized identifier so two different leads with the same
+ -- email or phone cannot concurrently create duplicate directory customers.
+ IF nullif(lower(btrim(v_lead.email)),'') IS NOT NULL THEN
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+   'crm-customer-email:'||v_lead.organization_id::text||':'||lower(btrim(v_lead.email)),0
+  ));
+ END IF;
+ v_phone_key:=nullif(regexp_replace(coalesce(v_lead.phone,''),'[^0-9]','','g'),'');
+ IF v_phone_key IS NOT NULL THEN
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+   'crm-customer-phone:'||v_lead.organization_id::text||':'||v_phone_key,0
+  ));
  END IF;
 
  SELECT array_agg(matches.id ORDER BY matches.id) INTO v_customer_ids
