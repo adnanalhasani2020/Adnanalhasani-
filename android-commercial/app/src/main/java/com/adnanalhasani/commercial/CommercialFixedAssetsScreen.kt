@@ -34,6 +34,7 @@ private val assetIo=Executors.newSingleThreadExecutor()
 private val assetMain=Handler(Looper.getMainLooper())
 private fun assetStatusLabel(s:String)=when(s){"draft"->"مسودة";"active"->"نشط";"disposed"->"مستبعد";else->s}
 private fun assetMethodLabel(s:String)=if(s=="double_declining")"القسط المتناقص المزدوج" else "القسط الثابت"
+private fun todayAssetDate():String = SimpleDateFormat("yyyy-MM-dd",Locale.US).format(Calendar.getInstance().time)
 private fun chooseAssetDate(context:Context,current:String,onSelected:(String)->Unit){
  val c=Calendar.getInstance()
  runCatching{SimpleDateFormat("yyyy-MM-dd",Locale.US).parse(current)}.getOrNull()?.let{c.time=it}
@@ -127,8 +128,8 @@ internal fun CommercialFixedAssetsScreen(context:Context,onBack:()->Unit){
  if(createOpen){
   var code by remember{mutableStateOf("")};var name by remember{mutableStateOf("")}
   var category by remember{mutableStateOf("")};var serial by remember{mutableStateOf("")}
-  var description by remember{mutableStateOf("")};var acquisition by remember{mutableStateOf("2026-01-01")}
-  var available by remember{mutableStateOf("2026-01-01")};var cost by remember{mutableStateOf("")}
+  var description by remember{mutableStateOf("")};var acquisition by remember{mutableStateOf(todayAssetDate())}
+  var available by remember{mutableStateOf(todayAssetDate())};var cost by remember{mutableStateOf("")}
   var salvage by remember{mutableStateOf("0")};var life by remember{mutableStateOf("60")}
   var method by remember{mutableStateOf("straight_line")};var methodMenu by remember{mutableStateOf(false)}
   var notes by remember{mutableStateOf("")};var localError by remember{mutableStateOf("")}
@@ -167,7 +168,7 @@ internal fun CommercialFixedAssetsScreen(context:Context,onBack:()->Unit){
 
  updateTarget?.let{asset->
   var notes by remember(asset.id,asset.version){mutableStateOf(asset.notes)}
-  var disposalDate by remember(asset.id,asset.version){mutableStateOf("2026-11-06")}
+  var disposalDate by remember(asset.id,asset.version){mutableStateOf(todayAssetDate())}
   var proceeds by remember(asset.id,asset.version){mutableStateOf("")}
   var localError by remember{mutableStateOf("")}
   AlertDialog(onDismissRequest={if(!busy)updateTarget=null},title={Text(if(asset.status=="draft")"تفعيل الأصل" else if(asset.status=="active")"إدارة الأصل" else "تفاصيل الأصل")},
