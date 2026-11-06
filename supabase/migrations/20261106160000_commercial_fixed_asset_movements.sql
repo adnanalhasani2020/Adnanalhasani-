@@ -50,15 +50,6 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION 'asset_not_found_or_forbidden' USING ERRCODE='42501'; END IF;
  v_role:=public.commercial_fixed_asset_context_role(v_asset.organization_id,v_asset.activity_id);
  IF v_role NOT IN('owner','admin','manager') THEN RAISE EXCEPTION 'asset_write_permission_required' USING ERRCODE='42501'; END IF;
- IF v_asset.status='disposed' THEN RAISE EXCEPTION 'disposed_asset_cannot_move' USING ERRCODE='22023'; END IF;
- IF p_to_location_id IS NOT NULL AND NOT EXISTS(
-  SELECT 1 FROM public.commercial_organization_locations l
-  WHERE l.id=p_to_location_id AND l.organization_id=v_asset.organization_id AND l.state='active'
- ) THEN RAISE EXCEPTION 'asset_location_not_in_organization' USING ERRCODE='42501'; END IF;
- IF p_to_custodian_id IS NOT NULL AND NOT EXISTS(
-  SELECT 1 FROM public.commercial_organization_members m
-  WHERE m.organization_id=v_asset.organization_id AND m.user_id=p_to_custodian_id AND m.state='active'
- ) THEN RAISE EXCEPTION 'asset_custodian_not_active_member' USING ERRCODE='22023'; END IF;
  v_fp:=md5(jsonb_build_object('asset_id',p_asset_id,'to_location',p_to_location_id,
   'to_custodian',p_to_custodian_id,'reason',btrim(p_reason))::text);
  PERFORM pg_advisory_xact_lock(hashtextextended(v_asset.organization_id::text||':'||
@@ -72,6 +63,15 @@ BEGIN
   END IF;
   RETURN jsonb_build_object('id',v_existing.id,'asset_id',p_asset_id,'version',v_asset.version,'replayed',true);
  END IF;
+ IF v_asset.status='disposed' THEN RAISE EXCEPTION 'disposed_asset_cannot_move' USING ERRCODE='22023'; END IF;
+ IF p_to_location_id IS NOT NULL AND NOT EXISTS(
+  SELECT 1 FROM public.commercial_organization_locations l
+  WHERE l.id=p_to_location_id AND l.organization_id=v_asset.organization_id AND l.state='active'
+ ) THEN RAISE EXCEPTION 'asset_location_not_in_organization' USING ERRCODE='42501'; END IF;
+ IF p_to_custodian_id IS NOT NULL AND NOT EXISTS(
+  SELECT 1 FROM public.commercial_organization_members m
+  WHERE m.organization_id=v_asset.organization_id AND m.user_id=p_to_custodian_id AND m.state='active'
+ ) THEN RAISE EXCEPTION 'asset_custodian_not_active_member' USING ERRCODE='22023'; END IF;
  IF p_to_location_id IS NOT DISTINCT FROM v_asset.location_id
   AND p_to_custodian_id IS NOT DISTINCT FROM v_asset.custodian_id THEN
   RAISE EXCEPTION 'asset_movement_has_no_changes' USING ERRCODE='22023';
