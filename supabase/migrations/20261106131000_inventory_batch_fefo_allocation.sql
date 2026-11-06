@@ -14,7 +14,7 @@ SET search_path TO 'pg_catalog','public','commercial_private'
 AS $function$
 DECLARE
  v_item public.commercial_sale_items%ROWTYPE;
- v_org uuid; v_sale_user uuid; v_method text:='weighted_average'; v_rotation text:='fifo';
+ v_org uuid; v_sale_user uuid; v_method text:='weighted_average'; v_rotation text:='fefo';
  v_balance public.commercial_inventory_balances%ROWTYPE;
  v_layer public.commercial_inventory_cost_layers%ROWTYPE;
  v_quantity numeric; v_expected_sale_quantity numeric; v_movement_count integer; v_movement_delta numeric;
@@ -47,7 +47,7 @@ BEGIN
  SELECT p.rotation_method INTO v_rotation FROM public.commercial_inventory_rotation_policies p
  WHERE p.organization_id=v_org AND (p.location_id=p_location_id OR p.location_id IS NULL)
  ORDER BY (p.location_id IS NOT NULL) DESC LIMIT 1;
- v_rotation:=coalesce(v_rotation,'fifo');
+ v_rotation:=coalesce(v_rotation,'fefo');
 
  SELECT * INTO v_balance FROM public.commercial_inventory_balances b
  WHERE b.organization_id=v_org AND b.location_id=p_location_id AND b.offering_id=v_item.offering_id FOR UPDATE;
