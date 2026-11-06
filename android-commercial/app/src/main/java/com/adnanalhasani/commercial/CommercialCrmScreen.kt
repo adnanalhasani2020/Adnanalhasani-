@@ -358,6 +358,7 @@ private fun CrmActivityCard(activity: CommercialCrmActivity, leadName: String, o
 
 @Composable
 private fun CrmLeadDialog(
+    saving: Boolean,
     onDismiss: () -> Unit,
     onSave: (String, String, String, String, String, String, String?) -> Unit
 ) {
@@ -369,9 +370,9 @@ private fun CrmLeadDialog(
     var notes by remember { mutableStateOf("") }
     var followUp by remember { mutableStateOf("") }
     var sourceExpanded by remember { mutableStateOf(false) }
-    var busy by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     AlertDialog(
-        onDismissRequest = { if (!busy) onDismiss() },
+        onDismissRequest = { if (!saving) onDismiss() },
         title = { Text("إضافة عميل محتمل") },
         text = {
             Column(Modifier.heightIn(max = 520.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -408,6 +409,7 @@ private fun CrmLeadDialog(
 @Composable
 private fun CrmFollowUpDialog(
     leadName: String,
+    saving: Boolean,
     onDismiss: () -> Unit,
     onSave: (String, String, String, String?) -> Unit
 ) {
@@ -416,10 +418,9 @@ private fun CrmFollowUpDialog(
     var description by remember { mutableStateOf("") }
     var dueAt by remember { mutableStateOf("") }
     var typeExpanded by remember { mutableStateOf(false) }
-    var busy by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
     AlertDialog(
-        onDismissRequest = { if (!busy) onDismiss() },
+        onDismissRequest = { if (!saving) onDismiss() },
         title = { Text("متابعة: $leadName") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
