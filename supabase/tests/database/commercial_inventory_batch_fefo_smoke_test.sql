@@ -1,0 +1,84 @@
+-- PostgreSQL 17 smoke test for physical batches and FEFO issue.
+DO $test$
+DECLARE
+  v_org uuid:='10000000-0000-4000-8000-000000000001';
+  v_location uuid:='20000000-0000-4000-8000-000000000001';
+  v_offering uuid:='30000000-0000-4000-8000-000000000001';
+  v_user uuid:='40000000-0000-4000-8000-000000000001';
+  v_sale uuid:='50000000-0000-4000-8000-000000000001';
+  v_item uuid:='60000000-0000-4000-8000-000000000001';
+  v_old_layer uuid:='70000000-0000-4000-8000-000000000001';
+  v_early_layer uuid:='70000000-0000-4000-8000-000000000002';
+  v_receipt uuid:='80000000-0000-4000-8000-000000000001';
+  v_alloc jsonb;
+  v_early numeric;
+  v_old numeric;
+BEGIN
+  INSERT INTO auth.users(id) VALUES(v_user);
+  INSERT INTO public.commercial_organizations(id) VALUES(v_org);
+  INSERT INTO public.commercial_organization_locations(id,organization_id,state) VALUES(v_location,v_org,'active');
+  INSERT INTO public.commercial_offerings(id) VALUES(v_offering);
+  INSERT INTO public.commercial_organization_members(organization_id,user_id,state,role) VALUES(v_org,v_user,'active','manager');
+  PERFORM set_config('request.jwt.claim.sub',v_user::text,false);
+
+  INSERT INTO public.commercial_inventory_rotation_policies(organization_id,location_id,rotation_method,created_by)
+  VALUES(v_org,v_location,'fefo',v_user);
+  INSERT INTO public.commercial_inventory_costing_policies(id,organization_id,location_id,costing_method)
+  VALUES(gen_random_uuid(),v_org,v_location,'fifo');
+
+  INSERT INTO public.commercial_inventory_balances(id,organization_id,location_id,offering_id,quantity_on_hand,quantity_reserved,reorder_point,unit_cost_minor,updated_at)
+  VALUES(gen_random_uuid(),v_org,v_location,v_offering,6,0,0,100,now());
+  INSERT INTO public.commercial_sales(id,user_id,organization_id,status)
+  VALUES(v_sale,v_user,v_org,'completed');
+  INSERT INTO public.commercial_sale_items(id,sale_id,offering_id,quantity,quantity_in_stock_units)
+  VALUES(v_item,v_sale,v_offering,4,4);
+  INSERT INTO public.commercial_stock_movements(id,offering_id,sale_id,movement_type,quantity_delta,source_ref,created_at,created_by)
+  VALUES(gen_random_uuid(),v_offering,v_sale,'sale',-4,
+    'sale:'||v_sale::text||':offering:'||v_offering::text||':location:'||v_location::text,now(),v_user);
+
+  INSERT INTO public.commercial_inventory_cost_layers(
+    id,organization_id,location_id,offering_id,source_type,source_ref,received_at,
+    quantity_received,quantity_remaining,source_unit_cost_minor,unit_cost_minor,created_at,
+    batch_number,expires_on,stock_condition
+  ) VALUES
+    (v_old_layer,v_org,v_location,v_offering,'purchase_receipt','batch-old',now()-interval '5 days',3,3,80,80,now()-interval '5 days','LOT-OLD',date '2027-02-01','sellable'),
+    (v_early_layer,v_org,v_location,v_offering,'purchase_receipt','batch-fefo',now()-interval '4 days',3,3,120,120,now()-interval '4 days','LOT-FEFO',date '2026-12-01','sellable');
+
+  v_alloc:=commercial_private.commercial_allocate_sale_item_cost(v_item,v_location);
+  SELECT coalesce(sum(quantity),0) INTO v_early FROM public.commercial_inventory_cost_allocations
+    WHERE sale_item_id=v_item AND cost_layer_id=v_early_layer;
+  SELECT coalesce(sum(quantity),0) INTO v_old FROM public.commercial_inventory_cost_allocations
+    WHERE sale_item_id=v_item AND cost_layer_id=v_old_layer;
+  IF v_early<>3 OR v_old<>1 THEN
+    RAISE EXCEPTION 'fefo_allocation_order_failed: early %, old %',v_early,v_old;
+  END IF;
+
+  -- Receipt-item metadata must be copied to the exact cost layer created by that receipt.
+  INSERT INTO public.commercial_purchase_receipts(id,organization_id,location_id)
+  VALUES(v_receipt,v_org,v_location);
+  INSERT INTO public.commercial_inventory_receipts(id,organization_id,location_id,offering_id,source_ref,request_fingerprint,quantity,unit_cost_minor,created_by,created_at)
+  VALUES(v_receipt,v_org,v_location,v_offering,'batch-metadata-receipt','fingerprint',2,100,v_user,now());
+  INSERT INTO public.commercial_inventory_cost_layers(
+    id,organization_id,location_id,offering_id,inventory_receipt_id,source_type,source_ref,received_at,
+    quantity_received,quantity_remaining,source_unit_cost_minor,unit_cost_minor,created_at
+  ) VALUES(gen_random_uuid(),v_org,v_location,v_offering,v_receipt,'purchase_receipt','metadata-layer',now(),2,2,100,100,now());
+  INSERT INTO public.commercial_purchase_receipt_items(
+    id,organization_id,receipt_id,purchase_order_id,purchase_order_item_id,offering_id,quantity,unit_cost_minor,inventory_receipt_id,batch_number,expires_on
+  ) VALUES(gen_random_uuid(),v_org,v_receipt,gen_random_uuid(),gen_random_uuid(),v_offering,2,100,v_receipt,'LOT-META',date '2027-01-15');
+  IF NOT EXISTS (
+    SELECT 1 FROM public.commercial_inventory_cost_layers
+    WHERE inventory_receipt_id=v_receipt AND batch_number='LOT-META' AND expires_on=date '2027-01-15'
+  ) THEN RAISE EXCEPTION 'receipt_batch_metadata_not_persisted'; END IF;
+END;
+$test$;
+
+DO $test$
+DECLARE v_user uuid:='40000000-0000-4000-8000-000000000001';
+BEGIN
+  PERFORM set_config('request.jwt.claim.sub',v_user::text,false);
+  IF NOT EXISTS (
+    SELECT 1 FROM public.commercial_inventory_rotation_policies
+    WHERE rotation_method='fefo'
+  ) THEN RAISE EXCEPTION 'rotation_policy_not_persisted'; END IF;
+END;
+$test$;
