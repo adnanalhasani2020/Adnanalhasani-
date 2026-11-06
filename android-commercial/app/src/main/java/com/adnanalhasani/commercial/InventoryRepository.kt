@@ -90,6 +90,22 @@ internal fun loadCommercialCloudStockAlerts(context: Context): List<CommercialCl
     val query = "/rest/v1/commercial_inventory_balances" +
         "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,unit_cost_minor,offering:commercial_offerings!inner(id,activity_id,product:commercial_products!inner(name,unit_name,state),categories:commercial_offering_categories(is_primary,category:commercial_product_categories(name_ar,name_en)))" +
         "&organization_id=eq.$orgId&location_id=eq.$locationId&offering.activity_id=eq.$activityId&order=updated_at.desc,offering_id.asc"
+    val batchRows = JSONArray(SupabaseClient.request(
+        "/rest/v1/rpc/commercial_list_inventory_batches", "POST",
+        JSONObject().put("p_organization_id", orgId).put("p_location_id", locationId).put("p_activity_id", activityId),
+        access
+    ))
+    val sellableByOffering = mutableMapOf<String, BigDecimal>()
+    for (index in 0 until batchRows.length()) {
+        val batch = batchRows.optJSONObject(index) ?: continue
+        if (batch.optString("stock_condition") != "sellable") continue
+        val offeringId = batch.optString("offering_id")
+        val quantity = runCatching { BigDecimal(batch.optString("quantity_remaining", "0")) }.getOrNull()
+            ?: throw IllegalStateException("كمية إحدى الدفعات غير صالحة.")
+        if (offeringId.isNotBlank() && quantity.signum() > 0) {
+            sellableByOffering[offeringId] = (sellableByOffering[offeringId] ?: BigDecimal.ZERO).add(quantity)
+        }
+    }
     val rows = commercialCloudPagedGet(query, access)
     return buildList {
         for (index in 0 until rows.length()) {
@@ -117,7 +133,8 @@ internal fun loadCommercialCloudStockAlerts(context: Context): List<CommercialCl
                 productName = product.optString("name").ifBlank { "صنف بدون اسم" },
                 categoryName = categoryName,
                 unitName = product.optString("unit_name").ifBlank { "وحدة" },
-                availableQuantity = onHand.subtract(reserved).toDouble(),
+                availableQuantity = (sellableByOffering[offering.optString("id")] ?: BigDecimal.ZERO)
+                    .subtract(reserved).max(BigDecimal.ZERO).toDouble(),
                 reorderPoint = reorder.toDouble(),
                 quantityOnHand = onHand,
                 unitCostMinor = if (row.isNull("unit_cost_minor")) null else row.optLong("unit_cost_minor")
@@ -131,6 +148,91 @@ internal data class CommercialInventoryCostingPolicyState(
     val locationMethod: String?,
     val effectiveMethod: String
 )
+
+internal data class CommercialCloudInventoryBatch(
+    val id: String,
+    val offeringId: String,
+    val productName: String,
+    val batchNumber: String,
+    val receivedAt: String,
+    val expiresOn: String?,
+    val quantityRemaining: BigDecimal,
+    val stockCondition: String
+)
+
+internal fun loadCommercialCloudInventoryBatches(context: Context): List<CommercialCloudInventoryBatch> {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val activityId = saved.getString("activity_id", null).orEmpty()
+    val locationId = saved.getString("location_id", null).orEmpty()
+    require(activityId.isNotBlank() && locationId.isNotBlank()) { "بيانات النشاط والموقع غير محفوظة." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = JSONArray(SupabaseClient.request(
+        "/rest/v1/rpc/commercial_list_inventory_batches", "POST",
+        JSONObject().put("p_organization_id", orgId).put("p_location_id", locationId).put("p_activity_id", activityId),
+        access
+    ))
+    return buildList {
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val quantity = runCatching { BigDecimal(row.optString("quantity_remaining", "0")) }.getOrNull()
+                ?: throw IllegalStateException("كمية إحدى الدفعات غير صالحة.")
+            if (quantity.signum() <= 0) continue
+            add(CommercialCloudInventoryBatch(
+                id = row.optString("id"),
+                offeringId = row.optString("offering_id"),
+                productName = row.optString("product_name").ifBlank { "صنف بدون اسم" },
+                batchNumber = row.optString("batch_number").takeUnless { it == "null" }.orEmpty(),
+                receivedAt = row.optString("received_at").takeUnless { it == "null" }.orEmpty(),
+                expiresOn = row.optString("expires_on").takeUnless { it.isBlank() || it == "null" },
+                quantityRemaining = quantity,
+                stockCondition = row.optString("stock_condition").ifBlank { "sellable" }
+            ))
+        }
+    }
+}
+
+internal data class CommercialInventoryRotationPolicyState(
+    val organizationMethod: String?,
+    val locationMethod: String?,
+    val effectiveMethod: String
+)
+
+internal fun loadCommercialInventoryRotationPolicy(context: Context): CommercialInventoryRotationPolicyState {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val locationId = saved.getString("location_id", null).orEmpty()
+    require(locationId.isNotBlank()) { "اختر موقع المؤسسة قبل تحميل طريقة صرف الدفعات." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/commercial_inventory_rotation_policies?select=id,location_id,rotation_method" +
+            "&organization_id=eq.$orgId&or=(location_id.eq.$locationId,location_id.is.null)&order=location_id.desc",
+        access
+    )
+    var organizationMethod: String? = null
+    var locationMethod: String? = null
+    for (index in 0 until rows.length()) {
+        val row = rows.optJSONObject(index) ?: continue
+        val method = row.optString("rotation_method").takeIf { it in setOf("fifo", "fefo") } ?: continue
+        val scope = row.optString("location_id").takeUnless { it.isBlank() || it == "null" }
+        if (scope == null) organizationMethod = method else if (scope == locationId) locationMethod = method
+    }
+    return CommercialInventoryRotationPolicyState(organizationMethod, locationMethod, locationMethod ?: organizationMethod ?: "fefo")
+}
+
+internal fun saveCommercialInventoryRotationPolicy(context: Context, method: String, scope: String) {
+    require(method in setOf("fifo", "fefo")) { "طريقة صرف الدفعات غير صالحة." }
+    require(scope in setOf("organization", "location")) { "نطاق سياسة الصرف غير صالح." }
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val locationId = saved.getString("location_id", null).orEmpty()
+    require(scope != "location" || locationId.isNotBlank()) { "اختر موقع المؤسسة أولًا." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    SupabaseClient.request(
+        "/rest/v1/rpc/commercial_set_inventory_rotation_policy", "POST",
+        JSONObject().put("p_organization_id", orgId)
+            .put("p_location_id", if (scope == "location") locationId else JSONObject.NULL)
+            .put("p_rotation_method", method),
+        access
+    )
+}
 
 internal data class CommercialCloudCostLayerSummary(
     val activeLayerCount: Int,

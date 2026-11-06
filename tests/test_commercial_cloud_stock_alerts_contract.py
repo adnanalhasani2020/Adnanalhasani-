@@ -25,7 +25,9 @@ class CommercialCloudStockAlertsContractTests(unittest.TestCase):
     def test_screen_uses_existing_cloud_inventory_projection(self):
         self.assertIn("loadCommercialCloudStockAlerts(context)", self.screen)
         self.assertIn("internal fun loadCommercialCloudStockAlerts", self.repository)
-        self.assertIn("availableQuantity = onHand.subtract(reserved).toDouble()", self.repository)
+        self.assertIn("commercial_list_inventory_batches", self.repository)
+        self.assertIn("availableQuantity = (sellableByOffering", self.repository)
+        self.assertIn("subtract(reserved).max(BigDecimal.ZERO)", self.repository)
         self.assertIn("parseWholeInventoryQuantity(row.optString(\"quantity_on_hand\", \"0\"), \"quantity_on_hand\")", self.repository)
         self.assertIn("reorderValue.stripTrailingZeros().scale() <= 0", self.catalog_repository)
         self.assertIn("reorderValue.intValueExact()", self.catalog_repository)

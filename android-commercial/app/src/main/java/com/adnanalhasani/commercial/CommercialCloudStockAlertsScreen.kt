@@ -59,12 +59,19 @@ private val StockAlertsMain = Handler(Looper.getMainLooper())
 @Composable
 internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Unit) {
     var products by remember { mutableStateOf<List<CommercialCloudStockAlert>>(emptyList()) }
+    var inventoryBatches by remember { mutableStateOf<List<CommercialCloudInventoryBatch>>(emptyList()) }
     var search by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("all") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var reloadToken by remember { mutableIntStateOf(0) }
     var costingPolicy by remember { mutableStateOf<CommercialInventoryCostingPolicyState?>(null) }
+    var rotationPolicy by remember { mutableStateOf<CommercialInventoryRotationPolicyState?>(null) }
+    var selectedRotationMethod by remember { mutableStateOf("fefo") }
+    var rotationScope by remember { mutableStateOf("location") }
+    var rotationSaving by remember { mutableStateOf(false) }
+    var rotationError by remember { mutableStateOf("") }
+    var rotationNotice by remember { mutableStateOf("") }
     var layerSummary by remember { mutableStateOf<CommercialCloudCostLayerSummary?>(null) }
     var selectedCostMethod by remember { mutableStateOf("weighted_average") }
     var costingScope by remember { mutableStateOf("location") }
@@ -80,6 +87,8 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
             val result = runCatching { loadCommercialCloudStockAlerts(context) }
             val policyResult = runCatching { loadCommercialInventoryCostingPolicy(context) }
             val layersResult = runCatching { loadCommercialCloudCostLayerSummary(context) }
+            val rotationResult = runCatching { loadCommercialInventoryRotationPolicy(context) }
+            val batchesResult = runCatching { loadCommercialCloudInventoryBatches(context) }
             StockAlertsMain.post {
                 result.onSuccess { products = it }
                     .onFailure { error = it.message ?: "تعذر تحميل المخزون السحابي." }
@@ -92,6 +101,12 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                 }
                 layersResult.onSuccess { layerSummary = it }
                     .onFailure { layerSummary = null }
+                rotationResult.onSuccess {
+                    rotationPolicy = it
+                    selectedRotationMethod = if (rotationScope == "organization") it.organizationMethod ?: it.effectiveMethod else it.locationMethod ?: it.effectiveMethod
+                    rotationError = ""
+                }.onFailure { rotationError = it.message ?: "تعذر تحميل سياسة صرف الدفعات." }
+                batchesResult.onSuccess { inventoryBatches = it }.onFailure { inventoryBatches = emptyList() }
                 loading = false
             }
         }
@@ -224,6 +239,60 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                 }
             }
             item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Color(0xFFE5EBE8))
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Text("طريقة صرف دفعات المخزون", color = StockAlertsInk, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text(
+                            "الطريقة الفعالة: " + if ((rotationPolicy?.effectiveMethod ?: "fifo") == "fefo")
+                                "FEFO — الأقرب انتهاءً يُصرف أولاً، ثم الأقدم استلاماً"
+                            else "FIFO — أقدم دفعة استلاماً تُصرف أولاً",
+                            color = StockAlertsGreen, fontWeight = FontWeight.SemiBold, fontSize = 12.sp
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            FilterChip(selected = selectedRotationMethod == "fifo", onClick = { selectedRotationMethod = "fifo" }, label = { Text("FIFO") })
+                            FilterChip(selected = selectedRotationMethod == "fefo", onClick = { selectedRotationMethod = "fefo" }, label = { Text("FEFO") })
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            FilterChip(selected = rotationScope == "location", onClick = {
+                                rotationScope = "location"
+                                selectedRotationMethod = rotationPolicy?.locationMethod ?: rotationPolicy?.effectiveMethod ?: "fifo"
+                            }, label = { Text("هذا الموقع") })
+                            FilterChip(selected = rotationScope == "organization", onClick = {
+                                rotationScope = "organization"
+                                selectedRotationMethod = rotationPolicy?.organizationMethod ?: "fefo"
+                            }, label = { Text("المؤسسة بالكامل") })
+                        }
+                        Button(onClick = {
+                            rotationSaving = true
+                            rotationError = ""
+                            rotationNotice = ""
+                            StockAlertsWorker.execute {
+                                val result = runCatching {
+                                    saveCommercialInventoryRotationPolicy(context, selectedRotationMethod, rotationScope)
+                                    loadCommercialInventoryRotationPolicy(context)
+                                }
+                                StockAlertsMain.post {
+                                    result.onSuccess {
+                                        rotationPolicy = it
+                                        rotationNotice = "حُفظت سياسة صرف الدفعات للعمليات الجديدة."
+                                    }.onFailure { rotationError = it.message ?: "تعذر حفظ سياسة صرف الدفعات." }
+                                    rotationSaving = false
+                                }
+                            }
+                        }, enabled = !rotationSaving && !loading, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (rotationSaving) "جارٍ الحفظ…" else "حفظ طريقة صرف الدفعات")
+                        }
+                        if (rotationError.isNotBlank()) Text(rotationError, color = Color(0xFFB3261E), fontSize = 11.sp)
+                        if (rotationNotice.isNotBlank()) Text(rotationNotice, color = StockAlertsGreen, fontSize = 11.sp)
+                        Text("FEFO يتجاهل الدفعات المنتهية أو غير الصالحة للبيع. تغيير السياسة لا يعيد كتابة تخصيصات المبيعات السابقة.", color = StockAlertsMuted, fontSize = 10.sp)
+                    }
+                }
+            }
+            item {
                 val summary = layerSummary
                 val totalOnHand = products.fold(java.math.BigDecimal.ZERO) { total, item -> total.add(item.quantityOnHand) }
                 val uncovered = totalOnHand.subtract(summary?.remainingQuantity ?: java.math.BigDecimal.ZERO).max(java.math.BigDecimal.ZERO)
@@ -243,6 +312,26 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                             if (uncovered.signum() > 0) {
                                 Text("كمية الرصيد التي لا تغطيها طبقات تكلفة: ${uncovered.stripTrailingZeros().toPlainString()} — لا تُخمن لها تكلفة.", color = Color(0xFF9A5B00), fontSize = 11.sp)
                             }
+                        }
+                    }
+                }
+            }
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color(0xFFE5EBE8))) {
+                    Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("دفعات المخزون الفعلية", color = StockAlertsInk, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("تظهر الكميات المتبقية لكل دفعة وتاريخ صلاحيتها وحالتها. الدفعات المنتهية أو المحجورة لا تدخل في الصرف.", color = StockAlertsMuted, fontSize = 11.sp)
+                        if (inventoryBatches.isEmpty()) {
+                            Text("لا توجد دفعات مسجلة بكمية متبقية لهذا الموقع، أو أن بيانات الدفعات لم تُحمّل.", color = StockAlertsMuted, fontSize = 11.sp)
+                        } else {
+                            inventoryBatches.take(60).forEach { batch ->
+                                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text(batch.productName + if (batch.batchNumber.isNotBlank()) " · ${batch.batchNumber}" else " · دفعة بلا رقم", color = StockAlertsInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                    Text("المتبقي: ${batch.quantityRemaining.stripTrailingZeros().toPlainString()} · الصلاحية: ${batch.expiresOn ?: "غير محددة"}", color = StockAlertsMuted, fontSize = 11.sp)
+                                    Text(when (batch.stockCondition) { "expired" -> "منتهية الصلاحية — غير قابلة للبيع"; "damaged" -> "تالف — غير قابل للبيع"; "quarantine" -> "محجور — غير قابل للبيع"; else -> "صالح مبدئياً للصرف" }, color = if (batch.stockCondition == "sellable") StockAlertsGreen else Color(0xFFB3261E), fontSize = 10.sp)
+                                }
+                            }
+                            if (inventoryBatches.size > 60) Text("يتم عرض أول 60 دفعة؛ الإجمالي ${inventoryBatches.size}.", color = StockAlertsMuted, fontSize = 10.sp)
                         }
                     }
                 }
@@ -325,7 +414,7 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
             }
             item {
                 Text(
-                    "الكمية المعروضة هي المتاح للبيع بعد طرح المحجوز من الرصيد. هذه شاشة متابعة فقط؛ لا تعدّل الأرصدة ولا تنشئ حركات مخزون.",
+                    "المتاح للبيع محسوب من الدفعات الصالحة فقط بعد طرح المحجوز؛ الدفعات المنتهية أو التالفة أو المحجورة مستبعدة. هذه شاشة متابعة فقط؛ لا تعدّل الأرصدة ولا تنشئ حركات مخزون.",
                     color = StockAlertsMuted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 8.dp)
                 )
             }
