@@ -33,7 +33,7 @@ def test_active_migration_chain_matches_the_deployed_forward_versions():
 def test_active_migration_versions_are_unique_and_well_formed():
     versions = []
     for path in MIGRATIONS.glob("*.sql"):
-        match = re.match(r"^(\\d{14})_", path.name)
+        match = re.match(r"^(\d{14})_", path.name)
         assert match, f"migration filename must start with a 14-digit version: {path.name}"
         versions.append(match.group(1))
     assert len(versions) == len(set(versions)), "duplicate active migration version detected"
