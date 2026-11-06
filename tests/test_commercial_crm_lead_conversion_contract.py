@@ -2,6 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20261106150000_commercial_crm_lead_conversion.sql"
+HARDENING = ROOT / "supabase/migrations/20261106180000_harden_crm_lead_conversion_match_serialization.sql"
 FIXTURE = ROOT / "supabase/tests/fixtures/commercial_crm_leads_schema_fixture.sql"
 SMOKE = ROOT / "supabase/tests/database/commercial_crm_lead_conversion_smoke_test.sql"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCrmRepository.kt"
@@ -29,9 +30,11 @@ def test_lead_conversion_prevents_duplicates_and_is_idempotent():
     assert "crm-lead:" in sql
     assert "request_fingerprint" in sql
     assert "FOR UPDATE" in sql
-    assert "crm-customer-email:" in sql
-    assert "crm-customer-phone:" in sql
-    assert "pg_advisory_xact_lock" in sql
+    hardening = HARDENING.read_text(encoding="utf-8")
+    assert "crm-customer-email:" in hardening
+    assert "crm-customer-phone:" in hardening
+    assert "pg_advisory_xact_lock" in hardening
+    assert "SECURITY DEFINER SET search_path = ''" in hardening
     assert "'converted_customer_id',c.customer_id" in sql
     assert "'converted_at',c.created_at" in sql
 
