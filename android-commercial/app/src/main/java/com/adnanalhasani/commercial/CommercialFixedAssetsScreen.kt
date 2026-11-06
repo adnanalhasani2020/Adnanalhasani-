@@ -46,6 +46,12 @@ private fun chooseAssetDate(context:Context,current:String,onSelected:(String)->
 @Composable
 internal fun CommercialFixedAssetsScreen(context:Context,onBack:()->Unit){
  var assets by remember{mutableStateOf<List<CommercialFixedAsset>>(emptyList())}
+ var locations by remember{mutableStateOf<List<CommercialFixedAssetLocation>>(emptyList())}
+ var custodians by remember{mutableStateOf<List<CommercialFixedAssetCustodian>>(emptyList())}
+ var movementAsset by remember{mutableStateOf<CommercialFixedAsset?>(null)}
+ var movementHistory by remember{mutableStateOf<List<CommercialFixedAssetMovement>>(emptyList())}
+ var movementLoading by remember{mutableStateOf(false)}
+ var movementError by remember{mutableStateOf("")}
  var loading by remember{mutableStateOf(true)}
  var busy by remember{mutableStateOf(false)}
  var error by remember{mutableStateOf("")}
@@ -62,7 +68,14 @@ internal fun CommercialFixedAssetsScreen(context:Context,onBack:()->Unit){
   loading=true;error=""
   assetIo.execute{
    val result=runCatching{loadCommercialFixedAssets(context,statusFilter)}
-   assetMain.post{loading=false;result.onSuccess{assets=it}.onFailure{error=it.message?:"تعذر تحميل سجل الأصول."}}
+   val loadedLocations=runCatching{loadCommercialFixedAssetLocations(context)}.getOrDefault(emptyList())
+   val loadedCustodians=runCatching{loadCommercialFixedAssetCustodians(context)}.getOrDefault(emptyList())
+   assetMain.post{
+    loading=false
+    result.onSuccess{assets=it}.onFailure{error=it.message?:"تعذر تحميل سجل الأصول."}
+    locations=loadedLocations
+    custodians=loadedCustodians
+   }
   }
  }
  Scaffold(containerColor=Color(0xFFF5F7F6),
@@ -109,6 +122,7 @@ internal fun CommercialFixedAssetsScreen(context:Context,onBack:()->Unit){
       Text("القيمة المتبقية: "+String.format(Locale.US,"%,d %s",asset.salvageValueMinor,asset.currencyCode)+" • العمر: ${asset.usefulLifeMonths} شهر",fontSize=11.sp,color=AssetMuted)
       Text("طريقة الإهلاك: "+assetMethodLabel(asset.depreciationMethod),fontSize=11.sp,color=AssetMuted)
       if(asset.locationName.isNotBlank())Text("الموقع: "+asset.locationName,fontSize=11.sp,color=AssetMuted)
+      if(asset.custodianId.isNotBlank())Text("المسؤول: "+(custodians.firstOrNull{it.userId==asset.custodianId}?.label?:asset.custodianId.take(8)),fontSize=11.sp,color=AssetMuted)
       if(asset.serialNumber.isNotBlank())Text("الرقم التسلسلي: "+asset.serialNumber,fontSize=11.sp,color=AssetMuted)
       Row(horizontalArrangement=Arrangement.spacedBy(7.dp),modifier=Modifier.fillMaxWidth()){
        if(asset.status=="active")OutlinedButton(onClick={
@@ -118,6 +132,13 @@ internal fun CommercialFixedAssetsScreen(context:Context,onBack:()->Unit){
         }
        },modifier=Modifier.weight(1f),enabled=!busy){Text("معاينة الإهلاك")}
        OutlinedButton(onClick={updateTarget=asset},modifier=Modifier.weight(1f),enabled=!busy){Text(if(asset.status=="draft")"تفعيل الأصل" else if(asset.status=="active")"إدارة الأصل" else "التفاصيل")}
+       OutlinedButton(onClick={
+        movementAsset=asset;movementLoading=true;movementError="";movementHistory=emptyList()
+        assetIo.execute{
+         val r=runCatching{loadCommercialFixedAssetMovements(context,asset.id)}
+         assetMain.post{movementLoading=false;r.onSuccess{movementHistory=it}.onFailure{movementError=it.message?:"تعذر تحميل سجل حركة الأصل."}}
+        }
+       },modifier=Modifier.weight(1f),enabled=!busy){Text("سجل النقل")}
       }
      }
     }
@@ -133,6 +154,8 @@ internal fun CommercialFixedAssetsScreen(context:Context,onBack:()->Unit){
   var salvage by remember{mutableStateOf("0")};var life by remember{mutableStateOf("60")}
   var method by remember{mutableStateOf("straight_line")};var methodMenu by remember{mutableStateOf(false)}
   var notes by remember{mutableStateOf("")};var localError by remember{mutableStateOf("")}
+  var selectedLocation by remember{mutableStateOf("")};var selectedCustodian by remember{mutableStateOf("")}
+  var locationMenu by remember{mutableStateOf(false)};var custodianMenu by remember{mutableStateOf(false)}
   AlertDialog(onDismissRequest={if(!busy)createOpen=false},title={Text("تسجيل أصل ثابت")},
    text={Column(Modifier.fillMaxWidth().heightIn(max=540.dp),verticalArrangement=Arrangement.spacedBy(7.dp)){
     OutlinedTextField(code,{code=it.take(64)},label={Text("رمز الأصل *")},modifier=Modifier.fillMaxWidth(),singleLine=true)
@@ -148,6 +171,24 @@ internal fun CommercialFixedAssetsScreen(context:Context,onBack:()->Unit){
     Box{OutlinedButton(onClick={methodMenu=true},modifier=Modifier.fillMaxWidth()){Text("طريقة الإهلاك: "+assetMethodLabel(method))}
      DropdownMenu(methodMenu,{methodMenu=false}){listOf("straight_line","double_declining").forEach{m->DropdownMenuItem(text={Text(assetMethodLabel(m))},onClick={method=m;methodMenu=false})}}
     }
+    Box{
+     OutlinedButton(onClick={locationMenu=true},modifier=Modifier.fillMaxWidth()){
+      Text("الموقع: "+(locations.firstOrNull{it.id==selectedLocation}?.name?:if(selectedLocation.isBlank())"بدون موقع" else "موقع محدد"))
+     }
+     DropdownMenu(locationMenu,{locationMenu=false}){
+      DropdownMenuItem(text={Text("بدون موقع")},onClick={selectedLocation="";locationMenu=false})
+      locations.forEach{loc->DropdownMenuItem(text={Text(loc.name)},onClick={selectedLocation=loc.id;locationMenu=false})}
+     }
+    }
+    Box{
+     OutlinedButton(onClick={custodianMenu=true},modifier=Modifier.fillMaxWidth()){
+      Text("المسؤول: "+(custodians.firstOrNull{it.userId==selectedCustodian}?.label?:if(selectedCustodian.isBlank())"بدون مسؤول" else selectedCustodian.take(8)))
+     }
+     DropdownMenu(custodianMenu,{custodianMenu=false}){
+      DropdownMenuItem(text={Text("بدون مسؤول")},onClick={selectedCustodian="";custodianMenu=false})
+      custodians.forEach{member->DropdownMenuItem(text={Text(member.label)},onClick={selectedCustodian=member.userId;custodianMenu=false})}
+     }
+    }
     OutlinedTextField(notes,{notes=it.take(4000)},label={Text("ملاحظات")},modifier=Modifier.fillMaxWidth(),minLines=2)
     if(localError.isNotBlank())Text(localError,color=MaterialTheme.colorScheme.error,fontSize=12.sp)
    }},
@@ -157,7 +198,7 @@ internal fun CommercialFixedAssetsScreen(context:Context,onBack:()->Unit){
     else if(acquisition>available)localError="تاريخ بدء الاستخدام يجب ألا يسبق تاريخ الشراء."
     else{
      busy=true;localError=""
-     assetIo.execute{val r=runCatching{createCommercialFixedAsset(context,code,name,category,serial,description,acquisition,available,amount,salvageAmount,months,method,notes,newCommercialFixedAssetIdempotencyKey())}
+     assetIo.execute{val r=runCatching{createCommercialFixedAsset(context,code,name,category,serial,description,acquisition,available,amount,salvageAmount,months,method,notes,newCommercialFixedAssetIdempotencyKey(),selectedLocation.takeIf{it.isNotBlank()},selectedCustodian.takeIf{it.isNotBlank()})}
       assetMain.post{busy=false;r.onSuccess{notice="تم تسجيل الأصل كمسودة. فعّله بعد مراجعة بياناته.";createOpen=false;refresh++}.onFailure{localError=it.message?:"تعذر حفظ الأصل."}}
      }
     }
@@ -170,11 +211,47 @@ internal fun CommercialFixedAssetsScreen(context:Context,onBack:()->Unit){
   var notes by remember(asset.id,asset.version){mutableStateOf(asset.notes)}
   var disposalDate by remember(asset.id,asset.version){mutableStateOf(todayAssetDate())}
   var proceeds by remember(asset.id,asset.version){mutableStateOf("")}
+  var selectedLocation by remember(asset.id,asset.version){mutableStateOf(asset.locationId)}
+  var selectedCustodian by remember(asset.id,asset.version){mutableStateOf(asset.custodianId)}
+  var movementReason by remember(asset.id,asset.version){mutableStateOf("")}
+  var locationMenu by remember{mutableStateOf(false)};var custodianMenu by remember{mutableStateOf(false)}
   var localError by remember{mutableStateOf("")}
   AlertDialog(onDismissRequest={if(!busy)updateTarget=null},title={Text(if(asset.status=="draft")"تفعيل الأصل" else if(asset.status=="active")"إدارة الأصل" else "تفاصيل الأصل")},
    text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
     Text(asset.name+" • "+asset.code,fontWeight=FontWeight.SemiBold,color=AssetInk)
     OutlinedTextField(notes,{notes=it.take(4000)},label={Text("ملاحظات")},modifier=Modifier.fillMaxWidth(),minLines=2)
+    if(asset.status!="disposed"){
+     Box{
+      OutlinedButton(onClick={locationMenu=true},modifier=Modifier.fillMaxWidth()){
+       Text("الموقع: "+(locations.firstOrNull{it.id==selectedLocation}?.name?:if(selectedLocation.isBlank())"بدون موقع" else selectedLocation.take(8)))
+      }
+      DropdownMenu(locationMenu,{locationMenu=false}){
+       DropdownMenuItem(text={Text("بدون موقع")},onClick={selectedLocation="";locationMenu=false})
+       locations.forEach{loc->DropdownMenuItem(text={Text(loc.name)},onClick={selectedLocation=loc.id;locationMenu=false})}
+      }
+     }
+     Box{
+      OutlinedButton(onClick={custodianMenu=true},modifier=Modifier.fillMaxWidth()){
+       Text("المسؤول: "+(custodians.firstOrNull{it.userId==selectedCustodian}?.label?:if(selectedCustodian.isBlank())"بدون مسؤول" else selectedCustodian.take(8)))
+      }
+      DropdownMenu(custodianMenu,{custodianMenu=false}){
+       DropdownMenuItem(text={Text("بدون مسؤول")},onClick={selectedCustodian="";custodianMenu=false})
+       custodians.forEach{member->DropdownMenuItem(text={Text(member.label)},onClick={selectedCustodian=member.userId;custodianMenu=false})}
+      }
+     }
+     OutlinedTextField(movementReason,{movementReason=it.take(500)},label={Text("سبب نقل الأصل أو تغيير المسؤول")},modifier=Modifier.fillMaxWidth(),minLines=2)
+     Button(
+      onClick={
+       busy=true;localError=""
+       assetIo.execute{
+        val r=runCatching{moveCommercialFixedAsset(context,asset,selectedLocation.takeIf{it.isNotBlank()},selectedCustodian.takeIf{it.isNotBlank()},movementReason,newCommercialFixedAssetMovementKey())}
+        assetMain.post{busy=false;r.onSuccess{notice="تم حفظ حركة الأصل وتحديث موقعه ومسؤوله.";updateTarget=null;refresh++}.onFailure{localError=it.message?:"تعذر حفظ حركة الأصل."}}
+       }
+      },
+      enabled=!busy&&movementReason.isNotBlank()&&(selectedLocation!=asset.locationId||selectedCustodian!=asset.custodianId),
+      modifier=Modifier.fillMaxWidth()
+     ){Text("حفظ الموقع والمسؤول")}
+    }
     if(asset.status=="active"){
      OutlinedButton(onClick={chooseAssetDate(context,disposalDate){disposalDate=it}},modifier=Modifier.fillMaxWidth()){Text("تاريخ الاستبعاد: $disposalDate")}
      OutlinedTextField(proceeds,{proceeds=it.filter(Char::isDigit).take(16)},label={Text("متحصلات الاستبعاد بالوحدة الصغرى")},modifier=Modifier.fillMaxWidth(),singleLine=true)
@@ -195,6 +272,33 @@ internal fun CommercialFixedAssetsScreen(context:Context,onBack:()->Unit){
     }
    }){Text(if(asset.status=="draft")"تفعيل الأصل" else "تأكيد الاستبعاد")}},
    dismissButton={TextButton(onClick={updateTarget=null},enabled=!busy){Text("إغلاق")}}
+  )
+ }
+
+ movementAsset?.let{asset->
+  AlertDialog(
+   onDismissRequest={if(!movementLoading)movementAsset=null},
+   title={Text("سجل نقل الأصل: "+asset.code)},
+   text={
+    Column(Modifier.fillMaxWidth().heightIn(max=440.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+     if(movementLoading)LinearProgressIndicator(Modifier.fillMaxWidth())
+     if(movementError.isNotBlank())Text(movementError,color=MaterialTheme.colorScheme.error,fontSize=12.sp)
+     else if(!movementLoading&&movementHistory.isEmpty())Text("لا توجد حركات نقل مسجلة لهذا الأصل.",color=AssetMuted)
+     else LazyColumn(verticalArrangement=Arrangement.spacedBy(7.dp)){
+      items(movementHistory,key={it.id}){move->
+       Card(colors=CardDefaults.cardColors(containerColor=Color(0xFFF7FAF8)),border=BorderStroke(1.dp,AssetBorder)){
+        Column(Modifier.fillMaxWidth().padding(10.dp),verticalArrangement=Arrangement.spacedBy(4.dp)){
+         Text(move.reason,fontWeight=FontWeight.SemiBold,color=AssetInk)
+         Text("من: "+(move.fromLocationName.ifBlank{"بدون موقع"})+" ← إلى: "+(move.toLocationName.ifBlank{"بدون موقع"}),fontSize=11.sp,color=AssetMuted)
+         Text("المسؤول السابق: "+move.fromCustodianId.take(8)+" • الجديد: "+move.toCustodianId.take(8),fontSize=11.sp,color=AssetMuted)
+         Text(move.movedAt.replace('T',' ').take(16),fontSize=10.sp,color=AssetMuted)
+        }
+       }
+      }
+     }
+    }
+   },
+   confirmButton={TextButton(onClick={movementAsset=null},enabled=!movementLoading){Text("إغلاق")}}
   )
  }
 

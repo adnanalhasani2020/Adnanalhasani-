@@ -12,6 +12,9 @@ def test_fixed_asset_register_is_cloud_only_and_wired():
     assert "onFixedAssets = { commercialFixedAssetsPage = true }" in store
     assert "commercialFixedAssetsPage -> CommercialFixedAssetsScreen" in store
     assert "معاينة الإهلاك" in screen
+    assert "سجل النقل" in screen
+    assert "حفظ الموقع والمسؤول" in screen
+    assert "سبب نقل الأصل أو تغيير المسؤول" in screen
     assert "لا ينشئ قيد شراء أو قيد إهلاك أو حركة مخزون" in screen
     assert "تأكيد الاستبعاد" in screen
 
@@ -24,9 +27,15 @@ def test_fixed_asset_repository_uses_authenticated_rpc_boundary():
         "commercial_fixed_asset_list",
         "commercial_fixed_asset_update",
         "commercial_fixed_asset_depreciation_preview",
+        "commercial_fixed_asset_move",
+        "commercial_fixed_asset_movement_list",
     ):
         assert f"/rest/v1/rpc/{rpc}" in repository
     assert "newCommercialFixedAssetIdempotencyKey" in repository
+    assert "loadCommercialFixedAssetLocations" in repository
+    assert "loadCommercialFixedAssetCustodians" in repository
+    assert "loadCommercialFixedAssetMovements" in repository
+    assert "newCommercialFixedAssetMovementKey" in repository
 
 
 def test_fixed_asset_database_contract_is_tenant_scoped_and_non_posting():
@@ -43,3 +52,16 @@ def test_fixed_asset_database_contract_is_tenant_scoped_and_non_posting():
     assert "commercial_fixed_asset_depreciation_preview" in smoke
     assert "asset_disposal_was_allowed" not in smoke
     assert "asset_rls_or_table_privileges_invalid" in smoke
+
+def test_fixed_asset_movements_are_audited_idempotent_and_rpc_only():
+    migration = (ROOT / "supabase/migrations/20261106160000_commercial_fixed_asset_movements.sql").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github/workflows/commercial-fixed-assets-smoke.yml").read_text(encoding="utf-8")
+    assert "commercial_fixed_asset_movements" in migration
+    assert "commercial_fixed_asset_move" in migration
+    assert "commercial_fixed_asset_movement_list" in migration
+    assert "asset_movement_idempotency_conflict" in migration
+    assert "asset_movement_has_no_changes" in migration
+    assert "asset_movement_requires_movement_rpc" in migration
+    assert "ENABLE ROW LEVEL SECURITY" in migration
+    assert "REVOKE ALL ON TABLE public.commercial_fixed_asset_movements FROM PUBLIC,anon,authenticated" in migration
+    assert "commercial_fixed_asset_movements" in workflow

@@ -10,6 +10,7 @@ DECLARE
  activity_id uuid:='30000000-0000-0000-0000-000000000021';
  other_activity_id uuid:='30000000-0000-0000-0000-000000000022';
  location_id uuid:='40000000-0000-0000-0000-000000000021';
+ second_location_id uuid:='40000000-0000-0000-0000-000000000023';
  other_location_id uuid:='40000000-0000-0000-0000-000000000022';
  asset_id uuid; declining_asset_id uuid; result jsonb; rows jsonb;
 BEGIN
@@ -24,7 +25,8 @@ BEGIN
  INSERT INTO public.commercial_activities(id,organization_id,owner_user_id,name) VALUES
   (activity_id,org_id,manager_id,'Main activity'),(other_activity_id,other_org_id,outsider_id,'Other activity');
  INSERT INTO public.commercial_organization_locations(id,organization_id,name) VALUES
-  (location_id,org_id,'المستودع الرئيسي'),(other_location_id,other_org_id,'موقع آخر');
+  (location_id,org_id,'المستودع الرئيسي'),(second_location_id,org_id,'المستودع الفرعي'),
+  (other_location_id,other_org_id,'موقع آخر');
 
  PERFORM set_config('request.jwt.claim.sub',manager_id::text,true);
  result:=public.commercial_fixed_asset_create(org_id,activity_id,'VEH-001','سيارة نقل','مركبات',
@@ -85,6 +87,50 @@ BEGIN
  PERFORM set_config('request.jwt.claim.sub',manager_id::text,true);
  result:=public.commercial_fixed_asset_update(asset_id,1,'active',location_id,staff_id,'أصل مفعل',NULL,NULL);
  IF result->>'status'<>'active' OR (result->>'version')::integer<>2 THEN RAISE EXCEPTION 'asset_activation_failed'; END IF;
+ -- Assignment changes use a separate movement RPC and retain a complete audit trail.
+ PERFORM set_config('request.jwt.claim.sub',staff_id::text,true);
+ BEGIN
+  PERFORM public.commercial_fixed_asset_move(asset_id,2,second_location_id,staff_id,'نقل غير مصرح','asset-move-staff-001');
+  RAISE EXCEPTION 'staff_asset_movement_was_allowed';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+ PERFORM set_config('request.jwt.claim.sub',manager_id::text,true);
+ BEGIN
+  PERFORM public.commercial_fixed_asset_move(asset_id,2,other_location_id,manager_id,'موقع من مؤسسة أخرى','asset-move-cross-org-001');
+  RAISE EXCEPTION 'cross_org_asset_movement_was_allowed';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+ result:=public.commercial_fixed_asset_move(asset_id,2,second_location_id,manager_id,'نقل إلى المستودع الفرعي','asset-move-key-001');
+ IF result->>'replayed'<>'false' OR (result->>'version')::integer<>3 THEN
+  RAISE EXCEPTION 'asset_movement_failed';
+ END IF;
+ result:=public.commercial_fixed_asset_move(asset_id,2,second_location_id,manager_id,'نقل إلى المستودع الفرعي','asset-move-key-001');
+ IF result->>'replayed'<>'true' OR (result->>'version')::integer<>3 THEN
+  RAISE EXCEPTION 'asset_movement_idempotent_replay_failed';
+ END IF;
+ BEGIN
+  PERFORM public.commercial_fixed_asset_move(asset_id,2,second_location_id,manager_id,'سبب مختلف','asset-move-key-001');
+  RAISE EXCEPTION 'asset_movement_idempotency_fingerprint_was_not_enforced';
+ EXCEPTION WHEN unique_violation THEN NULL;
+ END;
+ BEGIN
+  PERFORM public.commercial_fixed_asset_move(asset_id,3,second_location_id,manager_id,'لا يوجد تغيير','asset-move-no-change-001');
+  RAISE EXCEPTION 'asset_no_change_movement_was_allowed';
+ EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+ END;
+ rows:=public.commercial_fixed_asset_movement_list(org_id,activity_id,asset_id,100);
+ IF jsonb_array_length(rows)<>1 OR rows->0->>'to_location_id'<>second_location_id::text
+  OR rows->0->>'from_location_id'<>location_id::text
+  OR rows->0->>'to_custodian_id'<>manager_id::text
+  OR rows->0->>'reason'<>'نقل إلى المستودع الفرعي' THEN
+  RAISE EXCEPTION 'asset_movement_history_failed';
+ END IF;
+ BEGIN
+  PERFORM public.commercial_fixed_asset_update(asset_id,3,'active',location_id,staff_id,'',NULL,NULL);
+  RAISE EXCEPTION 'asset_assignment_update_bypassed_movement_log';
+ EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+ END;
+
  rows:=public.commercial_fixed_asset_depreciation_preview(org_id,activity_id,asset_id,600);
  IF jsonb_array_length(rows->'periods')<>10
   OR (rows->>'total_preview_depreciation_minor')::bigint<>100000
@@ -99,7 +145,7 @@ BEGIN
  END IF;
 
  BEGIN
-  PERFORM public.commercial_fixed_asset_update(asset_id,2,'draft',location_id,staff_id,'',NULL,NULL);
+  PERFORM public.commercial_fixed_asset_update(asset_id,3,'draft',second_location_id,manager_id,'',NULL,NULL);
   RAISE EXCEPTION 'active_asset_reverted_to_draft';
  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
  END;
@@ -116,16 +162,18 @@ BEGIN
   RAISE EXCEPTION 'double_declining_depreciation_preview_failed';
  END IF;
 
- result:=public.commercial_fixed_asset_update(asset_id,2,'disposed',location_id,staff_id,
+ result:=public.commercial_fixed_asset_update(asset_id,3,'disposed',second_location_id,manager_id,
   'تم الاستبعاد',date '2026-10-01',15000::bigint);
- IF result->>'status'<>'disposed' OR (result->>'version')::integer<>3 THEN RAISE EXCEPTION 'asset_disposal_failed'; END IF;
+ IF result->>'status'<>'disposed' OR (result->>'version')::integer<>4 THEN RAISE EXCEPTION 'asset_disposal_failed'; END IF;
+ result:=public.commercial_fixed_asset_move(asset_id,2,second_location_id,manager_id,'نقل إلى المستودع الفرعي','asset-move-key-001');
+ IF result->>'replayed'<>'true' THEN RAISE EXCEPTION 'disposed_asset_movement_replay_failed'; END IF;
  BEGIN
   PERFORM public.commercial_fixed_asset_depreciation_preview(org_id,activity_id,asset_id,600);
   RAISE EXCEPTION 'disposed_asset_preview_was_allowed';
  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
  END;
  BEGIN
-  PERFORM public.commercial_fixed_asset_update(asset_id,3,'active',location_id,staff_id,'',NULL,NULL);
+  PERFORM public.commercial_fixed_asset_update(asset_id,4,'active',second_location_id,manager_id,'',NULL,NULL);
   RAISE EXCEPTION 'disposed_asset_reactivation_was_allowed';
  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
  END;
@@ -138,11 +186,17 @@ BEGIN
  END;
 
  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid='public.commercial_fixed_assets'::regclass)
+  OR NOT (SELECT relrowsecurity FROM pg_class WHERE oid='public.commercial_fixed_asset_movements'::regclass)
   OR has_table_privilege('anon','public.commercial_fixed_assets','SELECT')
   OR has_table_privilege('authenticated','public.commercial_fixed_assets','SELECT')
   OR has_table_privilege('authenticated','public.commercial_fixed_assets','INSERT')
   OR has_table_privilege('authenticated','public.commercial_fixed_assets','UPDATE')
-  OR has_table_privilege('authenticated','public.commercial_fixed_assets','DELETE') THEN
+  OR has_table_privilege('authenticated','public.commercial_fixed_assets','DELETE')
+  OR has_table_privilege('anon','public.commercial_fixed_asset_movements','SELECT')
+  OR has_table_privilege('authenticated','public.commercial_fixed_asset_movements','SELECT')
+  OR has_table_privilege('authenticated','public.commercial_fixed_asset_movements','INSERT')
+  OR has_table_privilege('authenticated','public.commercial_fixed_asset_movements','UPDATE')
+  OR has_table_privilege('authenticated','public.commercial_fixed_asset_movements','DELETE') THEN
   RAISE EXCEPTION 'asset_rls_or_table_privileges_invalid';
  END IF;
  IF has_function_privilege('anon','public.commercial_fixed_asset_create(uuid,uuid,text,text,text,text,text,date,date,bigint,bigint,text,integer,text,uuid,uuid,text,text)','EXECUTE')
@@ -152,7 +206,11 @@ BEGIN
   OR has_function_privilege('anon','public.commercial_fixed_asset_update(uuid,integer,text,uuid,uuid,text,date,bigint)','EXECUTE')
   OR NOT has_function_privilege('authenticated','public.commercial_fixed_asset_update(uuid,integer,text,uuid,uuid,text,date,bigint)','EXECUTE')
   OR has_function_privilege('anon','public.commercial_fixed_asset_depreciation_preview(uuid,uuid,uuid,integer)','EXECUTE')
-  OR NOT has_function_privilege('authenticated','public.commercial_fixed_asset_depreciation_preview(uuid,uuid,uuid,integer)','EXECUTE') THEN
+  OR NOT has_function_privilege('authenticated','public.commercial_fixed_asset_depreciation_preview(uuid,uuid,uuid,integer)','EXECUTE')
+  OR has_function_privilege('anon','public.commercial_fixed_asset_move(uuid,integer,uuid,uuid,text,text)','EXECUTE')
+  OR NOT has_function_privilege('authenticated','public.commercial_fixed_asset_move(uuid,integer,uuid,uuid,text,text)','EXECUTE')
+  OR has_function_privilege('anon','public.commercial_fixed_asset_movement_list(uuid,uuid,uuid,integer)','EXECUTE')
+  OR NOT has_function_privilege('authenticated','public.commercial_fixed_asset_movement_list(uuid,uuid,uuid,integer)','EXECUTE') THEN
   RAISE EXCEPTION 'asset_rpc_grants_invalid';
  END IF;
 END $$;
