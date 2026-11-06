@@ -193,9 +193,10 @@ BEGIN
  SELECT * INTO v_ticket FROM public.commercial_support_tickets t WHERE t.id=p_ticket_id FOR UPDATE;
  IF NOT FOUND THEN RAISE EXCEPTION 'support_ticket_not_found' USING ERRCODE='P0002'; END IF;
  v_role:=public.commercial_support_context_role(v_ticket.organization_id,v_ticket.activity_id);
- IF v_role='viewer' OR (v_role='staff' AND v_ticket.assigned_to<>v_uid AND v_ticket.created_by<>v_uid) THEN
+ IF v_role='viewer' OR (v_role='staff' AND v_ticket.assigned_to IS DISTINCT FROM v_uid AND v_ticket.created_by IS DISTINCT FROM v_uid) THEN
   RAISE EXCEPTION 'support_ticket_message_forbidden' USING ERRCODE='42501';
  END IF;
+ IF v_ticket.status='closed' THEN RAISE EXCEPTION 'support_ticket_closed' USING ERRCODE='22023'; END IF;
  v_fp:=md5(jsonb_build_object('ticket_id',p_ticket_id,'body',btrim(p_body))::text);
  PERFORM pg_advisory_xact_lock(hashtextextended(v_ticket.organization_id::text||':'||v_ticket.activity_id::text||':'||v_uid::text||':'||btrim(p_idempotency_key),0));
  SELECT * INTO v_existing FROM public.commercial_support_ticket_messages m
