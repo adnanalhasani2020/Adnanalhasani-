@@ -59,12 +59,7 @@ BEGIN
   SELECT 1 FROM public.commercial_organization_members m
   WHERE m.organization_id=v_asset.organization_id AND m.user_id=p_to_custodian_id AND m.state='active'
  ) THEN RAISE EXCEPTION 'asset_custodian_not_active_member' USING ERRCODE='22023'; END IF;
- IF p_to_location_id IS NOT DISTINCT FROM v_asset.location_id
-  AND p_to_custodian_id IS NOT DISTINCT FROM v_asset.custodian_id THEN
-  RAISE EXCEPTION 'asset_movement_has_no_changes' USING ERRCODE='22023';
- END IF;
- v_fp:=md5(jsonb_build_object('asset_id',p_asset_id,'from_location',v_asset.location_id,
-  'to_location',p_to_location_id,'from_custodian',v_asset.custodian_id,
+ v_fp:=md5(jsonb_build_object('asset_id',p_asset_id,'to_location',p_to_location_id,
   'to_custodian',p_to_custodian_id,'reason',btrim(p_reason))::text);
  PERFORM pg_advisory_xact_lock(hashtextextended(v_asset.organization_id::text||':'||
   v_asset.activity_id::text||':'||v_uid::text||':'||btrim(p_idempotency_key),0));
@@ -76,6 +71,10 @@ BEGIN
    RAISE EXCEPTION 'asset_movement_idempotency_conflict' USING ERRCODE='23505';
   END IF;
   RETURN jsonb_build_object('id',v_existing.id,'asset_id',p_asset_id,'version',v_asset.version,'replayed',true);
+ END IF;
+ IF p_to_location_id IS NOT DISTINCT FROM v_asset.location_id
+  AND p_to_custodian_id IS NOT DISTINCT FROM v_asset.custodian_id THEN
+  RAISE EXCEPTION 'asset_movement_has_no_changes' USING ERRCODE='22023';
  END IF;
  IF v_asset.version<>p_expected_version THEN RAISE EXCEPTION 'asset_version_conflict' USING ERRCODE='40001'; END IF;
  INSERT INTO public.commercial_fixed_asset_movements(
