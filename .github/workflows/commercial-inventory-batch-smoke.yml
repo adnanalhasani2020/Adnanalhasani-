@@ -55,5 +55,7 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106124500_inventory_batch_fefo_allocation.sql
       - name: Apply opening inventory batch valuation migration
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106131420_opening_inventory_batch_valuation.sql
+      - name: Apply opening inventory batch condition migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106134449_opening_inventory_batch_condition.sql
       - name: Verify receipt metadata, FEFO allocation, and opening valuation behavior
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_inventory_batch_fefo_smoke_test.sql

@@ -15,6 +15,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,6 +41,7 @@ private class OpeningInventoryBatchDraft(initialQuantity: String = "") {
     var unitCostMinor by mutableStateOf("")
     var batchNumber by mutableStateOf("")
     var expiresOn by mutableStateOf("")
+    var stockCondition by mutableStateOf("sellable")
 }
 
 @Composable
@@ -89,7 +91,7 @@ internal fun CommercialOpeningInventoryBatchValuationDialog(
         attempted = true
         error = ""
         val payload = drafts.map {
-            CommercialOpeningInventoryBatchInput(it.quantity, it.unitCostMinor, it.batchNumber, it.expiresOn)
+            CommercialOpeningInventoryBatchInput(it.quantity, it.unitCostMinor, it.batchNumber, it.expiresOn, it.stockCondition)
         }
         OpeningValuationWorker.execute {
             val result = runCatching {
@@ -169,6 +171,31 @@ internal fun CommercialOpeningInventoryBatchValuationDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                     singleLine = true,
                                     enabled = !attempted
+                                )
+                                Text("حالة الدفعة عند الجرد", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    FilterChip(
+                                        selected = row.stockCondition == "sellable",
+                                        onClick = { if (!attempted) row.stockCondition = "sellable" },
+                                        enabled = !attempted,
+                                        label = { Text("صالحة") }
+                                    )
+                                    FilterChip(
+                                        selected = row.stockCondition == "quarantine",
+                                        onClick = { if (!attempted) row.stockCondition = "quarantine" },
+                                        enabled = !attempted,
+                                        label = { Text("محجورة") }
+                                    )
+                                    FilterChip(
+                                        selected = row.stockCondition == "damaged",
+                                        onClick = { if (!attempted) row.stockCondition = "damaged" },
+                                        enabled = !attempted,
+                                        label = { Text("تالفة") }
+                                    )
+                                }
+                                Text(
+                                    "الدفعة المحجورة أو التالفة لا تدخل في الصرف. إذا كان تاريخ الصلاحية منتهياً، يصنفها الخادم منتهية تلقائياً.",
+                                    fontSize = 10.sp
                                 )
                                 if (!attempted && drafts.size > 1) {
                                     TextButton(onClick = { drafts.remove(row) }) { Text("حذف هذه الدفعة") }

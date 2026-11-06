@@ -148,8 +148,10 @@ BEGIN
   v_result:=public.commercial_record_opening_inventory_batches(
     v_org,v_location,v_offering,
     jsonb_build_array(
-      jsonb_build_object('quantity',20,'unit_cost_minor',100,'batch_number','OPEN-LOT-A','expires_on','2027-03-01'),
-      jsonb_build_object('quantity',30,'unit_cost_minor',200,'batch_number','OPEN-LOT-B','expires_on','2027-06-01')
+      jsonb_build_object('quantity',20,'unit_cost_minor',100,'batch_number','OPEN-LOT-A','expires_on','2027-03-01','stock_condition','sellable'),
+      jsonb_build_object('quantity',20,'unit_cost_minor',200,'batch_number','OPEN-LOT-B','expires_on','2027-06-01','stock_condition','quarantine'),
+      jsonb_build_object('quantity',5,'unit_cost_minor',200,'batch_number','OPEN-LOT-C','expires_on','2027-08-01','stock_condition','damaged'),
+      jsonb_build_object('quantity',5,'unit_cost_minor',200,'batch_number','OPEN-LOT-D','expires_on',current_date-1,'stock_condition','sellable')
     ),
     'opening-valuation-smoke-01'
   );
@@ -163,7 +165,7 @@ BEGIN
   INTO v_layers,v_source_costs
   FROM public.commercial_inventory_cost_layers
   WHERE organization_id=v_org AND location_id=v_location AND offering_id=v_offering;
-  IF v_layers<>2 OR v_source_costs<>'[100, 200]'::jsonb THEN
+  IF v_layers<>4 OR v_source_costs<>'[100, 200, 200, 200]'::jsonb THEN
     RAISE EXCEPTION 'opening_batch_layers_missing: count %, costs %',v_layers,v_source_costs;
   END IF;
   IF EXISTS (
@@ -171,12 +173,20 @@ BEGIN
     WHERE organization_id=v_org AND location_id=v_location AND offering_id=v_offering
       AND unit_cost_minor<>160
   ) THEN RAISE EXCEPTION 'opening_weighted_average_layers_not_revalued'; END IF;
+  IF (SELECT stock_condition FROM public.commercial_inventory_cost_layers WHERE batch_number='OPEN-LOT-A')<>'sellable'
+     OR (SELECT stock_condition FROM public.commercial_inventory_cost_layers WHERE batch_number='OPEN-LOT-B')<>'quarantine'
+     OR (SELECT stock_condition FROM public.commercial_inventory_cost_layers WHERE batch_number='OPEN-LOT-C')<>'damaged'
+     OR (SELECT stock_condition FROM public.commercial_inventory_cost_layers WHERE batch_number='OPEN-LOT-D')<>'expired' THEN
+    RAISE EXCEPTION 'opening_batch_condition_not_preserved_or_expiry_not_enforced';
+  END IF;
 
   v_replay:=public.commercial_record_opening_inventory_batches(
     v_org,v_location,v_offering,
     jsonb_build_array(
-      jsonb_build_object('quantity',20,'unit_cost_minor',100,'batch_number','OPEN-LOT-A','expires_on','2027-03-01'),
-      jsonb_build_object('quantity',30,'unit_cost_minor',200,'batch_number','OPEN-LOT-B','expires_on','2027-06-01')
+      jsonb_build_object('quantity',20,'unit_cost_minor',100,'batch_number','OPEN-LOT-A','expires_on','2027-03-01','stock_condition','sellable'),
+      jsonb_build_object('quantity',20,'unit_cost_minor',200,'batch_number','OPEN-LOT-B','expires_on','2027-06-01','stock_condition','quarantine'),
+      jsonb_build_object('quantity',5,'unit_cost_minor',200,'batch_number','OPEN-LOT-C','expires_on','2027-08-01','stock_condition','damaged'),
+      jsonb_build_object('quantity',5,'unit_cost_minor',200,'batch_number','OPEN-LOT-D','expires_on',current_date-1,'stock_condition','sellable')
     ),
     'opening-valuation-smoke-01'
   );
