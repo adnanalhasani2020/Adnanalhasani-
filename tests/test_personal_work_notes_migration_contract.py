@@ -2,7 +2,7 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase/migrations/20261105180000_commercial_personal_work_notes.sql"
+MIGRATION = ROOT / "supabase/migrations/20261106001452_commercial_personal_work_notes_forward_20261106.sql"
 
 
 def test_reminder_notification_type_is_added_before_personal_note_reminders_are_used():

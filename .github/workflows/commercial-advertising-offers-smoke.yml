@@ -7,7 +7,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'supabase/migrations/20261105190000_commercial_advertising_offers.sql'
+      - 'supabase/migrations/20261106001610_commercial_advertising_offers_forward_20261106.sql'
       - 'supabase/tests/fixtures/commercial_advertising_offers_schema_fixture.sql'
       - 'supabase/tests/database/commercial_advertising_offers_smoke_test.sql'
       - '.github/workflows/commercial-advertising-offers-smoke.yml'
@@ -48,6 +48,6 @@ jobs:
       - name: Load isolated advertising fixture
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_advertising_offers_schema_fixture.sql
       - name: Apply advertising migration
-        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261105190000_commercial_advertising_offers.sql
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106001610_commercial_advertising_offers_forward_20261106.sql
       - name: Verify campaign permissions, targeting and radius filtering
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_advertising_offers_smoke_test.sql

@@ -7,7 +7,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'supabase/migrations/20261105180000_commercial_personal_work_notes.sql'
+      - 'supabase/migrations/20261106001452_commercial_personal_work_notes_forward_20261106.sql'
       - 'supabase/tests/fixtures/commercial_personal_work_notes_schema_fixture.sql'
       - 'supabase/tests/database/commercial_personal_work_notes_smoke_test.sql'
       - '.github/workflows/personal-work-notes-smoke.yml'
@@ -48,6 +48,6 @@ jobs:
       - name: Load isolated personal notes fixture
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_personal_work_notes_schema_fixture.sql
       - name: Apply personal notes migration
-        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261105180000_commercial_personal_work_notes.sql
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106001452_commercial_personal_work_notes_forward_20261106.sql
       - name: Verify isolation, reminders, idempotency and completion
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_personal_work_notes_smoke_test.sql
