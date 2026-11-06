@@ -3,7 +3,7 @@ import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase/migrations/20261106100000_commercial_inventory_storage_transfers.sql"
+MIGRATION = ROOT / "supabase/held-migrations/storage/20261106100000_commercial_inventory_storage_transfers.sql"
 
 
 class CommercialInventoryStorageTransferTests(unittest.TestCase):
