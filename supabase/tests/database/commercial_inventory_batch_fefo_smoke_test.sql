@@ -29,8 +29,7 @@ BEGIN
   INSERT INTO public.commercial_organization_members(organization_id,user_id,state,role) VALUES(v_org,v_user,'active','manager');
   PERFORM set_config('request.jwt.claim.sub',v_user::text,false);
 
-  INSERT INTO public.commercial_inventory_rotation_policies(organization_id,location_id,rotation_method,created_by)
-  VALUES(v_org,v_location,'fefo',v_user);
+  PERFORM public.commercial_set_inventory_rotation_policy(v_org,v_location,'fefo');
   INSERT INTO public.commercial_inventory_costing_policies(id,organization_id,location_id,costing_method)
   VALUES(gen_random_uuid(),v_org,v_location,'fifo');
 
@@ -59,6 +58,10 @@ BEGIN
     WHERE sale_item_id=v_item AND cost_layer_id=v_old_layer;
   IF v_early<>3 OR v_old<>1 THEN
     RAISE EXCEPTION 'fefo_allocation_order_failed: early %, old %',v_early,v_old;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.commercial_inventory_cost_allocations
+    WHERE sale_item_id=v_item AND rotation_method='fefo') THEN
+    RAISE EXCEPTION 'allocation_rotation_method_not_audited';
   END IF;
   v_batches:=public.commercial_list_inventory_batches(v_org,v_location,v_activity);
   IF jsonb_array_length(v_batches)<>1 OR v_batches->0->>'batch_number'<>'LOT-OLD' THEN
