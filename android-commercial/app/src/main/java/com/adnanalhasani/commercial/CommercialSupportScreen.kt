@@ -142,7 +142,7 @@ internal fun CommercialSupportTicketsScreen(context:Context,onBack:()->Unit){
      }
     }
     Box{
-     OutlinedButton(onClick={priorityMenu=true},modifier=Modifier.fillMaxWidth()){Text("الأولوية: "+supportPriority(priority))}
+     OutlinedButton(onClick={priorityMenu=true},enabled=role!="viewer",modifier=Modifier.fillMaxWidth()){Text("الأولوية: "+supportPriority(priority))}
      DropdownMenu(priorityMenu,{priorityMenu=false}){
       listOf("low","normal","high","urgent").forEach{value->
        DropdownMenuItem(text={Text(supportPriority(value))},onClick={priority=value;priorityMenu=false})
@@ -214,7 +214,7 @@ internal fun CommercialSupportTicketsScreen(context:Context,onBack:()->Unit){
     }
     Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){
      Box(Modifier.weight(1f)){
-      OutlinedButton(onClick={statusMenu=true},modifier=Modifier.fillMaxWidth()){Text(supportStatus(selectedStatus),fontSize=11.sp)}
+      OutlinedButton(onClick={statusMenu=true},enabled=role!="viewer",modifier=Modifier.fillMaxWidth()){Text(supportStatus(selectedStatus),fontSize=11.sp)}
       DropdownMenu(statusMenu,{statusMenu=false}){
        statusOptions.forEach{value->DropdownMenuItem(text={Text(supportStatus(value))},onClick={selectedStatus=value;statusMenu=false})}
       }
@@ -251,7 +251,7 @@ internal fun CommercialSupportTicketsScreen(context:Context,onBack:()->Unit){
       }
      }
     }
-    OutlinedTextField(messageText,{messageText=it.take(4000)},label={Text("أضف ملاحظة داخلية")},modifier=Modifier.fillMaxWidth(),minLines=2)
+    OutlinedTextField(messageText,{messageText=it.take(4000)},label={Text("أضف ملاحظة داخلية")},modifier=Modifier.fillMaxWidth(),minLines=2,enabled=role!="viewer"&&ticket.status!="closed")
     if(localError.isNotBlank())Text(localError,color=MaterialTheme.colorScheme.error,fontSize=11.sp)
     Button(
      enabled=!busy&&role!="viewer"&&messageText.isNotBlank()&&ticket.status!="closed",
