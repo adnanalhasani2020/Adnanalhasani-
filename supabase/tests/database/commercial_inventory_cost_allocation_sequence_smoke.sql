@@ -20,7 +20,11 @@ BEGIN
   ) VALUES
     ('81000000-0000-4000-8000-000000000001','11000000-0000-4000-8000-000000000001',
      '21000000-0000-4000-8000-000000000001','31000000-0000-4000-8000-000000000001',
-     v_sale,v_item,v_first_layer,'fifo',3,100,300,now(),900),
+     v_sale,v_item,v_first_layer,'fifo',3,100,300,now(),900);
+  INSERT INTO public.commercial_inventory_cost_allocations(
+    id,organization_id,location_id,offering_id,sale_id,sale_item_id,cost_layer_id,
+    costing_method,quantity,unit_cost_minor,total_cost_minor,created_at,allocation_sequence
+  ) VALUES
     ('81000000-0000-4000-8000-000000000002','11000000-0000-4000-8000-000000000001',
      '21000000-0000-4000-8000-000000000001','31000000-0000-4000-8000-000000000001',
      v_sale,v_item,v_second_layer,'fifo',2,200,400,now(),900);
@@ -93,7 +97,11 @@ BEGIN
     id,organization_id,location_id,offering_id,sale_id,sale_item_id,cost_layer_id,
     costing_method,quantity,unit_cost_minor,total_cost_minor,created_at
   ) VALUES
-    (v_first_allocation,v_org,v_location,v_offering,v_sale,v_sale_item,v_first_layer,'fifo',3,100,300,now()),
+    (v_first_allocation,v_org,v_location,v_offering,v_sale,v_sale_item,v_first_layer,'fifo',3,100,300,now());
+  INSERT INTO public.commercial_inventory_cost_allocations(
+    id,organization_id,location_id,offering_id,sale_id,sale_item_id,cost_layer_id,
+    costing_method,quantity,unit_cost_minor,total_cost_minor,created_at
+  ) VALUES
     (v_second_allocation,v_org,v_location,v_offering,v_sale,v_sale_item,v_second_layer,'fifo',2,200,400,now());
   INSERT INTO public.commercial_return_restock_postings(
     return_item_id,return_id,organization_id,location_id,offering_id,quantity,unit_cost_minor,source_ref,created_by,created_at
