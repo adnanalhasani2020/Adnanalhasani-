@@ -37,4 +37,4 @@ The merchant chooses the payment method at approval. The customer cannot choose 
 
 ## Deployment note
 
-The migration and Android changes in this branch are source-code changes only. They are not applied to the production Supabase database by committing the migration file. Apply the migration through the project's normal reviewed deployment process, then run authenticated customer/merchant integration tests before enabling the feature for stores.
+The original undeployed migration `20261103010000_customer_payment_confirmation_requests.sql` is retained under `supabase/migrations_archive/2026-11-06/` so it cannot be replayed out of order. The forward-only replacement is `supabase/migrations/20261106140000_customer_payment_confirmation_requests_forward_20261106.sql`. The production database was checked on 2026-11-06 and still does not contain the request tables. This branch adds a PostgreSQL 17 lifecycle/security smoke test; the migration must not be treated as deployed until the PR is merged, the reviewed migration is applied through the normal deployment process, and authenticated customer/merchant acceptance tests pass.
