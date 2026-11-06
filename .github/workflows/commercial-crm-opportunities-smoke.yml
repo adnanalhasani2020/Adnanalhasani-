@@ -9,7 +9,7 @@ on:
     branches: [main]
     paths:
       - 'supabase/migrations/20261106111004_commercial_crm_leads_followups.sql'
-      - 'supabase/migrations/20261106120000_commercial_crm_opportunities.sql'
+      - 'supabase/migrations/20261106112403_commercial_crm_opportunities.sql'
       - 'supabase/tests/fixtures/commercial_crm_leads_schema_fixture.sql'
       - 'supabase/tests/database/commercial_crm_opportunities_smoke_test.sql'
       - '.github/workflows/commercial-crm-opportunities-smoke.yml'
@@ -55,6 +55,6 @@ jobs:
       - name: Apply CRM leads and follow-ups migration
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106111004_commercial_crm_leads_followups.sql
       - name: Apply CRM opportunity pipeline migration
-        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106120000_commercial_crm_opportunities.sql
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106112403_commercial_crm_opportunities.sql
       - name: Verify opportunity pipeline permissions, assignment, idempotency and optimistic concurrency
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_crm_opportunities_smoke_test.sql
