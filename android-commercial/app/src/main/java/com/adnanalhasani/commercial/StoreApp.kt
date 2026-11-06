@@ -85,6 +85,7 @@ internal fun StoreApp(context: Context) {
     var commercialCrmPage by remember { mutableStateOf(false) }
     var commercialCrmOpportunitiesPage by remember { mutableStateOf(false) }
     var commercialFixedAssetsPage by remember { mutableStateOf(false) }
+    var commercialSupportTicketsPage by remember { mutableStateOf(false) }
     var merchantPurchaseRequestPage by remember { mutableStateOf(false) }
     var settlingSaleNumber by remember { mutableIntStateOf(-1) }
     var cloudContextRevision by remember { mutableIntStateOf(0) }
@@ -341,6 +342,7 @@ internal fun StoreApp(context: Context) {
                     commercialCrmPage -> CommercialCrmScreen(context = context, onBack = { commercialCrmPage = false })
                     commercialCrmOpportunitiesPage -> CommercialCrmOpportunitiesScreen(context = context, onBack = { commercialCrmOpportunitiesPage = false })
                     commercialFixedAssetsPage -> CommercialFixedAssetsScreen(context = context, onBack = { commercialFixedAssetsPage = false })
+                    commercialSupportTicketsPage -> CommercialSupportTicketsScreen(context = context, onBack = { commercialSupportTicketsPage = false })
                     cloudSalesPage -> CommercialCloudSalesScreen(context = context, onBack = { cloudSalesPage = false })
                     cloudPurchasesPage -> CommercialCloudPurchasesScreen(context = context, onBack = { cloudPurchasesPage = false })
                     cloudStockAlertsPage -> CommercialCloudStockAlertsScreen(context = context, onBack = { cloudStockAlertsPage = false })
@@ -399,7 +401,7 @@ internal fun StoreApp(context: Context) {
                     else -> if (showPersonalAccounts) PersonalAccountsScreen(onBack = { showPersonalAccounts = false }) else if (showActivityProfile) ActivityProfileScreen(
                         onBack = { showActivityProfile = false; cloudContextRevision++ },
                         onCatalog = { showActivityProfile = false; cloudContextRevision++; showCatalog = true }
-                    ) else MoreScreen(cloudMode = cloudMode, onCrm = { commercialCrmPage = true }, onCrmOpportunities = { commercialCrmOpportunitiesPage = true }, onFixedAssets = { commercialFixedAssetsPage = true }, onPersonalAccounts = { showPersonalAccounts = true }, onPersonalWorkNotes = { personalWorkNotesPage = true }, onAppLock = { appLockSettingsPage = true }, onAds = { commercialAdsPage = true }, onCustomers = {
+                    ) else MoreScreen(cloudMode = cloudMode, onCrm = { commercialCrmPage = true }, onCrmOpportunities = { commercialCrmOpportunitiesPage = true }, onFixedAssets = { commercialFixedAssetsPage = true }, onSupportTickets = { commercialSupportTicketsPage = true }, onPersonalAccounts = { showPersonalAccounts = true }, onPersonalWorkNotes = { personalWorkNotesPage = true }, onAppLock = { appLockSettingsPage = true }, onAds = { commercialAdsPage = true }, onCustomers = {
                     showDebts = true
                 }, onReports = { showReportsCenter = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true }, onCustomerPortal = { customerPortalPage = true }, onCustomerOrders = { customerOrderFulfillmentPage = true }, onCustomerSupplyRequests = { customerSupplyRequestsPage = true }, onCreatePurchaseRequest = { merchantPurchaseRequestPage = true }, onBackup = { cloudNotice = "واجهة النسخ الاحتياطي لم تُربط بعد بعملية تصدير واستعادة موثوقة. لم يتم إنشاء نسخة غير مكتملة أو الادعاء بحفظها." })
                 }
