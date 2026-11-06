@@ -1,0 +1,52 @@
+name: Inventory cost allocation order smoke test
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/tests/fixtures/commercial_integer_quantity_schema_fixture.sql'
+      - 'supabase/tests/database/commercial_inventory_cost_allocation_sequence_smoke.sql'
+      - '.github/workflows/inventory-cost-allocation-order-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-migration-smoke:
+    name: PostgreSQL 17 allocation-order smoke test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Load data-free schema fixture
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_integer_quantity_schema_fixture.sql
+      - name: Apply allocation order migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106150000_inventory_cost_allocation_sequence.sql
+      - name: Verify database-owned sequence and reverse-order selection
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_inventory_cost_allocation_sequence_smoke.sql
