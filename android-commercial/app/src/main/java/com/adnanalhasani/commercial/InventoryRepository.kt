@@ -155,7 +155,8 @@ internal data class CommercialOpeningInventoryBatchInput(
     val quantity: String,
     val unitCostMinor: String,
     val batchNumber: String = "",
-    val expiresOn: String = ""
+    val expiresOn: String = "",
+    val stockCondition: String = "sellable"
 )
 
 internal fun recordCommercialOpeningInventoryBatches(
@@ -179,7 +180,7 @@ internal fun recordCommercialOpeningInventoryBatches(
             ?: throw IllegalArgumentException("تكلفة الدفعة رقم ${index + 1} غير صالحة.")
         require(cost >= 0L) { "تكلفة الوحدة لا يمكن أن تكون سالبة." }
         val lot = batch.batchNumber.trim()
-        val expiry = batch.expiresOn.trim()
+        val expiry = batch.expiresOn.trim()\n        val condition = batch.stockCondition.trim()\n        require(condition in setOf("sellable", "quarantine", "damaged", "expired")) { "حالة الدفعة غير صالحة." }
         require(lot.length <= 100) { "رقم التشغيلة يجب ألا يتجاوز 100 حرف." }
         require(expiry.isEmpty() || runCatching { java.time.LocalDate.parse(expiry) }.isSuccess) {
             "تاريخ الصلاحية يجب أن يكون بصيغة YYYY-MM-DD."
@@ -188,7 +189,7 @@ internal fun recordCommercialOpeningInventoryBatches(
             .put("quantity", quantity.stripTrailingZeros().toPlainString())
             .put("unit_cost_minor", cost)
             .put("batch_number", lot.takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
-            .put("expires_on", expiry.takeIf { it.isNotEmpty() } ?: JSONObject.NULL))
+            .put("expires_on", expiry.takeIf { it.isNotEmpty() } ?: JSONObject.NULL)\n            .put("stock_condition", condition))
     }
     val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
     val locationId = saved.getString("location_id", null).orEmpty()
