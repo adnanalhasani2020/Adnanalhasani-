@@ -80,9 +80,9 @@ BEGIN
  IF v_role='viewer' THEN RAISE EXCEPTION 'support_write_permission_required' USING ERRCODE='42501'; END IF;
  IF length(btrim(coalesce(p_subject,''))) NOT BETWEEN 1 AND 180
   OR length(btrim(coalesce(p_description,''))) NOT BETWEEN 1 AND 4000
-  OR p_category NOT IN('general','product','payment','delivery','technical','complaint','return','other')
+  OR p_category IS NULL OR p_category NOT IN('general','product','payment','delivery','technical','complaint','return','other')
   OR coalesce(p_priority,'normal') NOT IN('low','normal','high','urgent')
-  OR coalesce(p_source,'internal') NOT IN('internal','phone','whatsapp','email','customer_portal')
+  OR coalesce(p_source,'internal') NOT IN('internal','phone','whatsapp','email')
   OR p_idempotency_key IS NULL OR length(btrim(p_idempotency_key)) NOT BETWEEN 8 AND 200 THEN
   RAISE EXCEPTION 'invalid_support_ticket' USING ERRCODE='22023';
  END IF;
@@ -150,12 +150,12 @@ CREATE OR REPLACE FUNCTION public.commercial_support_ticket_update(
 DECLARE v_uid uuid:=auth.uid();v_ticket public.commercial_support_tickets%ROWTYPE;v_role text;v_assignee uuid;
 BEGIN
  IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
- IF p_status NOT IN('open','in_progress','waiting_customer','resolved','closed')
-  OR p_priority NOT IN('low','normal','high','urgent') THEN RAISE EXCEPTION 'invalid_support_ticket_update' USING ERRCODE='22023'; END IF;
+ IF p_status IS NULL OR p_status NOT IN('open','in_progress','waiting_customer','resolved','closed')
+  OR p_priority IS NULL OR p_priority NOT IN('low','normal','high','urgent') THEN RAISE EXCEPTION 'invalid_support_ticket_update' USING ERRCODE='22023'; END IF;
  SELECT * INTO v_ticket FROM public.commercial_support_tickets t WHERE t.id=p_ticket_id FOR UPDATE;
  IF NOT FOUND THEN RAISE EXCEPTION 'support_ticket_not_found' USING ERRCODE='P0002'; END IF;
  v_role:=public.commercial_support_context_role(v_ticket.organization_id,v_ticket.activity_id);
- IF v_role='viewer' OR (v_role='staff' AND v_ticket.assigned_to<>v_uid AND v_ticket.created_by<>v_uid) THEN
+ IF v_role='viewer' OR (v_role='staff' AND v_ticket.assigned_to IS DISTINCT FROM v_uid AND v_ticket.created_by IS DISTINCT FROM v_uid) THEN
   RAISE EXCEPTION 'support_ticket_update_forbidden' USING ERRCODE='42501';
  END IF;
  IF p_expected_version IS NULL OR p_expected_version<>v_ticket.version THEN
@@ -226,7 +226,7 @@ BEGIN
  SELECT * INTO v_ticket FROM public.commercial_support_tickets t WHERE t.id=p_ticket_id;
  IF NOT FOUND THEN RAISE EXCEPTION 'support_ticket_not_found' USING ERRCODE='P0002'; END IF;
  v_role:=public.commercial_support_context_role(v_ticket.organization_id,v_ticket.activity_id);
- IF v_role='staff' AND v_ticket.assigned_to<>v_uid AND v_ticket.created_by<>v_uid THEN
+ IF v_role='staff' AND v_ticket.assigned_to IS DISTINCT FROM v_uid AND v_ticket.created_by IS DISTINCT FROM v_uid THEN
   RAISE EXCEPTION 'support_ticket_message_forbidden' USING ERRCODE='42501';
  END IF;
  SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY x.created_at,x.id),'[]'::jsonb) INTO v_result
