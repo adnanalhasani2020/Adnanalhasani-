@@ -52,6 +52,7 @@ def test_support_ticket_smoke_covers_roles_and_lifecycle():
         "viewer_ticket_read_failed",
         "manager_ticket_update_failed",
         "closed_ticket_accepted_new_message",
+        "closed_ticket_message_replay_failed",
         "cross_tenant_ticket_list_was_allowed",
         "support_ticket_rpc_grants_invalid",
     ):
