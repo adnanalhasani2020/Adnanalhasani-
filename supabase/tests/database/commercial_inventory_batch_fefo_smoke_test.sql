@@ -6,6 +6,9 @@ DECLARE
   v_offering uuid:='30000000-0000-4000-8000-000000000001';
   v_activity uuid:='30000000-0000-4000-8000-000000000002';
   v_product uuid:='30000000-0000-4000-8000-000000000003';
+  v_offering_expired uuid:='30000000-0000-4000-8000-000000000004';
+  v_sale_expired uuid:='50000000-0000-4000-8000-000000000002';
+  v_item_expired uuid:='60000000-0000-4000-8000-000000000002';
   v_user uuid:='40000000-0000-4000-8000-000000000001';
   v_sale uuid:='50000000-0000-4000-8000-000000000001';
   v_item uuid:='60000000-0000-4000-8000-000000000001';
@@ -61,6 +64,28 @@ BEGIN
   IF jsonb_array_length(v_batches)<>2 OR NOT (v_batches->0 ? 'batch_number') THEN
     RAISE EXCEPTION 'member_batch_projection_failed: %',v_batches;
   END IF;
+
+  -- Expired stock must not be allocated even when its physical balance is positive.
+  INSERT INTO public.commercial_offerings(id,activity_id,product_id) VALUES(v_offering_expired,v_activity,v_product);
+  INSERT INTO public.commercial_inventory_balances(id,organization_id,location_id,offering_id,quantity_on_hand,quantity_reserved,reorder_point,unit_cost_minor,updated_at)
+  VALUES(gen_random_uuid(),v_org,v_location,v_offering_expired,1,0,0,100,now());
+  INSERT INTO public.commercial_sales(id,user_id,organization_id,status) VALUES(v_sale_expired,v_user,v_org,'completed');
+  INSERT INTO public.commercial_sale_items(id,sale_id,offering_id,quantity,quantity_in_stock_units)
+  VALUES(v_item_expired,v_sale_expired,v_offering_expired,1,1);
+  INSERT INTO public.commercial_stock_movements(id,offering_id,sale_id,movement_type,quantity_delta,source_ref,created_at,created_by)
+  VALUES(gen_random_uuid(),v_offering_expired,v_sale_expired,'sale',-1,
+    'sale:'||v_sale_expired::text||':offering:'||v_offering_expired::text||':location:'||v_location::text,now(),v_user);
+  INSERT INTO public.commercial_inventory_cost_layers(
+    id,organization_id,location_id,offering_id,source_type,source_ref,received_at,
+    quantity_received,quantity_remaining,source_unit_cost_minor,unit_cost_minor,created_at,
+    batch_number,expires_on,stock_condition
+  ) VALUES(gen_random_uuid(),v_org,v_location,v_offering_expired,'purchase_receipt','expired-lot',now()-interval '2 days',1,1,100,100,now(),'EXPIRED',current_date-1,'expired');
+  BEGIN
+    PERFORM commercial_private.commercial_allocate_sale_item_cost(v_item_expired,v_location);
+    RAISE EXCEPTION 'expired_batch_was_sold';
+  EXCEPTION WHEN SQLSTATE '55000' THEN
+    NULL;
+  END;
 
   -- Receipt-item metadata must be copied to the exact cost layer created by that receipt.
   INSERT INTO public.commercial_purchase_receipts(id,organization_id,location_id)
