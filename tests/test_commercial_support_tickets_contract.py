@@ -57,3 +57,25 @@ def test_support_ticket_smoke_covers_roles_and_lifecycle():
     ):
         assert marker in smoke
     assert "commercial_support_tickets" in WORKFLOW.read_text(encoding="utf-8")
+
+REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialSupportRepository.kt"
+SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialSupportScreen.kt"
+STORE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/StoreApp.kt"
+MORE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalOperationalScreens.kt"
+
+
+def test_android_support_ticket_screen_is_wired_to_cloud_rpc_and_navigation():
+    repository = REPOSITORY.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8")
+    store = STORE.read_text(encoding="utf-8")
+    more = MORE.read_text(encoding="utf-8")
+    assert "commercial_support_ticket_list" in repository
+    assert "commercial_support_ticket_create" in repository
+    assert "commercial_support_ticket_update" in repository
+    assert "commercial_support_ticket_message_create" in repository
+    assert "commercial_support_ticket_message_list" in repository
+    assert "loadCommercialSupportMembers" in repository
+    assert "تذاكر الدعم" in screen
+    assert "الملاحظات الداخلية" in screen
+    assert "commercialSupportTicketsPage" in store
+    assert "onSupportTickets" in more
