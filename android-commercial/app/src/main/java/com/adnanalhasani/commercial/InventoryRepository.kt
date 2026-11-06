@@ -149,23 +149,21 @@ internal fun loadCommercialCloudInventoryBatches(context: Context): List<Commerc
     val locationId = saved.getString("location_id", null).orEmpty()
     require(activityId.isNotBlank() && locationId.isNotBlank()) { "بيانات النشاط والموقع غير محفوظة." }
     val (orgId, access) = commercialMasterDataAccess(context)
-    val rows = commercialCloudPagedGet(
-        "/rest/v1/commercial_inventory_cost_layers?select=id,offering_id,batch_number,received_at,expires_on,quantity_remaining,stock_condition,offering:commercial_offerings!inner(activity_id,product:commercial_products(name))" +
-            "&organization_id=eq.$orgId&location_id=eq.$locationId&offering.activity_id=eq.$activityId&order=expires_on.asc.nullslast,received_at.asc,id.asc",
+    val rows = JSONArray(SupabaseClient.request(
+        "/rest/v1/rpc/commercial_list_inventory_batches", "POST",
+        JSONObject().put("p_organization_id", orgId).put("p_location_id", locationId).put("p_activity_id", activityId),
         access
-    )
+    ))
     return buildList {
         for (index in 0 until rows.length()) {
             val row = rows.optJSONObject(index) ?: continue
-            val offering = row.optJSONObject("offering") ?: continue
-            val product = offering.optJSONObject("product")
             val quantity = runCatching { BigDecimal(row.optString("quantity_remaining", "0")) }.getOrNull()
                 ?: throw IllegalStateException("كمية إحدى الدفعات غير صالحة.")
             if (quantity.signum() <= 0) continue
             add(CommercialCloudInventoryBatch(
                 id = row.optString("id"),
                 offeringId = row.optString("offering_id"),
-                productName = product?.optString("name").orEmpty().ifBlank { "صنف بدون اسم" },
+                productName = row.optString("product_name").ifBlank { "صنف بدون اسم" },
                 batchNumber = row.optString("batch_number").takeUnless { it == "null" }.orEmpty(),
                 receivedAt = row.optString("received_at").takeUnless { it == "null" }.orEmpty(),
                 expiresOn = row.optString("expires_on").takeUnless { it.isBlank() || it == "null" },
