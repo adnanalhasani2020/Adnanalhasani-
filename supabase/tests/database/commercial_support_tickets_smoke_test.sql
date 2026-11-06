@@ -150,7 +150,9 @@ BEGIN
   OR has_function_privilege('anon','public.commercial_support_ticket_list(uuid,uuid,text,integer)','EXECUTE')
   OR NOT has_function_privilege('authenticated','public.commercial_support_ticket_list(uuid,uuid,text,integer)','EXECUTE')
   OR has_function_privilege('anon','public.commercial_support_ticket_message_list(uuid,integer)','EXECUTE')
-  OR NOT has_function_privilege('authenticated','public.commercial_support_ticket_message_list(uuid,integer)','EXECUTE') THEN
+  OR NOT has_function_privilege('authenticated','public.commercial_support_ticket_message_list(uuid,integer)','EXECUTE')
+  OR has_function_privilege('anon','public.commercial_support_my_role(uuid,uuid)','EXECUTE')
+  OR NOT has_function_privilege('authenticated','public.commercial_support_my_role(uuid,uuid)','EXECUTE') THEN
   RAISE EXCEPTION 'support_ticket_rpc_grants_invalid';
  END IF;
 END $$;
