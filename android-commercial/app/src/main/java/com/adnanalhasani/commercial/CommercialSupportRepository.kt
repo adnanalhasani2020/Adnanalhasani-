@@ -12,6 +12,10 @@ internal data class CommercialSupportTicket(
     val createdAt:String
 )
 
+internal data class CommercialSupportMember(val userId:String,val role:String){
+    val label:String get()="$role • ${userId.take(8)}"
+}
+
 internal data class CommercialSupportMessage(
     val id:String,val body:String,val createdBy:String,val createdAt:String
 )
@@ -22,6 +26,21 @@ private fun supportContext(context:Context):Triple<String,String,String>{
         .getString("activity_id",null).orEmpty()
     require(activityId.isNotBlank()){ "ملف النشاط غير محفوظ." }
     return Triple(organizationId,activityId,access)
+}
+
+internal fun loadCommercialSupportMembers(context:Context):List<CommercialSupportMember>{
+    val (organizationId,_,access)=supportContext(context)
+    val rows=commercialCloudPagedGet(
+        "/rest/v1/commercial_organization_members?select=user_id,role&organization_id=eq.$organizationId&state=eq.active&order=role.asc,user_id.asc",
+        access
+    )
+    return buildList{
+        for(i in 0 until rows.length()){
+            val row=rows.optJSONObject(i)?:continue
+            val id=row.optString("user_id").takeUnless{it.isBlank()||it=="null"}.orEmpty()
+            if(id.isNotBlank())add(CommercialSupportMember(id,row.optString("role")))
+        }
+    }
 }
 
 internal fun loadCommercialSupportRole(context:Context):String{
