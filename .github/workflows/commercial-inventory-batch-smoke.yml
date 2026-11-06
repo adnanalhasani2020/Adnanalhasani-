@@ -50,8 +50,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_integer_quantity_schema_fixture.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_inventory_batch_schema_stubs.sql
       - name: Apply physical batch metadata and rotation migration
-        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106130000_inventory_batch_expiry_and_rotation.sql
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106124452_inventory_batch_expiry_and_rotation.sql
       - name: Apply FIFO FEFO allocation migration
-        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106131000_inventory_batch_fefo_allocation.sql
-      - name: Verify receipt metadata and FEFO allocation behavior
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106124500_inventory_batch_fefo_allocation.sql
+      - name: Apply opening inventory batch valuation migration\n        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106125821_opening_inventory_batch_valuation.sql\n      - name: Verify receipt metadata, FEFO allocation, and opening valuation behavior
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_inventory_batch_fefo_smoke_test.sql
