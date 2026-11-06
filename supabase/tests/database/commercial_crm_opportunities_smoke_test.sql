@@ -34,13 +34,13 @@ BEGIN
  IF staff_lead_id IS NULL THEN RAISE EXCEPTION 'staff_lead_setup_failed'; END IF;
 
  result:=public.commercial_crm_opportunity_create(org_id,activity_id,lead_id,'توريد سنوي','qualification',
-  20::smallint,500000::bigint,NULL,current_date+30,'فرصة توريد',staff_id,'crm-opportunity-key-001');
+  20::smallint,500000::bigint,NULL,current_date+30,'فرصة توريد',manager_id,'crm-opportunity-key-001');
  opp_id:=(result->>'id')::uuid;
  IF opp_id IS NULL OR result->>'stage'<>'qualification' OR (result->>'replayed')::boolean THEN
   RAISE EXCEPTION 'manager_opportunity_create_failed';
  END IF;
  result:=public.commercial_crm_opportunity_create(org_id,activity_id,lead_id,'توريد سنوي','qualification',
-  20::smallint,500000::bigint,NULL,current_date+30,'فرصة توريد',staff_id,'crm-opportunity-key-001');
+  20::smallint,500000::bigint,NULL,current_date+30,'فرصة توريد',manager_id,'crm-opportunity-key-001');
  IF (result->>'id')::uuid<>opp_id OR NOT (result->>'replayed')::boolean THEN
   RAISE EXCEPTION 'opportunity_idempotent_replay_failed';
  END IF;
