@@ -18,16 +18,17 @@ Physical stock rotation is independent from valuation policy:
 - Expired, quarantined, damaged, and otherwise non-sellable layers are never issued.
 - If eligible layers cannot cover the sale quantity, checkout fails atomically rather than silently drawing from an unknown or blocked layer.
 
-Each sale allocation stores the actual layer ID, quantity, cost snapshot, valuation method, and physical rotation method. The existing sale return engine links returned quantities to the original sale cost allocations and restores the same layer. Return inspection already prevents restocking damaged or written-off items.
+Each sale allocation stores the actual layer ID, quantity, cost snapshot, valuation method, and physical rotation method. The existing sale return engine links returned quantities to the original sale cost allocations and restores the same layer IDs. For a partial return from a sale line that consumed several layers, the engine restores the most recently consumed allocation first (reverse consumption order); a full return restores all source layers according to their original allocations. It does not invent a new batch. Return inspection prevents damaged, written-off, or uninspected items from being restocked.
 
 ## Android workflow
 
-The purchase receipt dialog accepts a lot number and optional expiry date for each received line. The stock screen exposes the effective FIFO/FEFO policy, allows an authorized manager to change it for the current location or organization, and displays remaining batch quantities and expiry status through a member-scoped RPC that does not expose acquisition costs.
+The purchase receipt dialog accepts a lot number and optional expiry date for each received line. When existing opening stock has no cost-layer coverage, an owner/admin/manager can record one or more actual opening lots with exact quantities and verified unit costs; the operation must cover the complete unvalued balance, is idempotent, and does not change on-hand quantity or create a duplicate stock movement. The stock screen exposes the effective FIFO/FEFO policy, allows an authorized manager to change it for the current location or organization, and displays remaining batch quantities and expiry status through a member-scoped RPC that does not expose acquisition costs.
 
 ## Migration and release safety
 
 The two forward-only migrations are:
 - `20261106124452_inventory_batch_expiry_and_rotation.sql`
 - `20261106124500_inventory_batch_fefo_allocation.sql`
+- `20261106131420_opening_inventory_batch_valuation.sql`
 
-Historical stock layers retain their current quantities and costs. Existing layers without lot metadata remain eligible under FIFO; FEFO treats missing expiry as unknown and sorts those layers after known expiry dates. No production migration should be applied until the PostgreSQL 17 batch smoke test, Python suite, and Android build pass, and the live migration history has been reconciled. Authenticated end-to-end acceptance should then cover a supplier receipt, multi-layer sale, partial return to the original layer, expired/damaged exclusion, and two-tenant isolation.
+Historical stock layers retain their current quantities and costs. Existing layers without lot metadata remain eligible under FIFO; FEFO treats missing expiry as unknown and sorts those layers after known expiry dates. The three forward-only migrations have been applied to the Supabase production project, and the PostgreSQL 17 batch smoke test, Python suite, and Android build passed on the merged candidate. Authenticated end-to-end acceptance remains necessary for a real manager receipt, opening valuation, multi-layer sale, partial/full return, expired/damaged exclusion, and two-tenant isolation.
