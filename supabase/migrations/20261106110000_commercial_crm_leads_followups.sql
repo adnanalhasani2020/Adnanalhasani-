@@ -13,7 +13,6 @@ CREATE TABLE public.commercial_crm_leads (
   assigned_to uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
   notes text NOT NULL DEFAULT '' CHECK (length(notes) <= 4000),
   next_follow_up_at timestamptz,
-  converted_customer_id uuid REFERENCES public.commercial_customers(id) ON DELETE RESTRICT,
   created_by uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
   idempotency_key text NOT NULL CHECK (length(btrim(idempotency_key)) BETWEEN 8 AND 200),
   request_fingerprint text NOT NULL CHECK (length(request_fingerprint)=32),
@@ -156,7 +155,7 @@ BEGIN
  SELECT coalesce(jsonb_agg(jsonb_build_object(
   'id',l.id,'name',l.name,'company_name',l.company_name,'email',l.email,'phone',l.phone,
   'source',l.source,'status',l.status,'assigned_to',l.assigned_to,'notes',l.notes,
-  'next_follow_up_at',l.next_follow_up_at,'converted_customer_id',l.converted_customer_id,
+  'next_follow_up_at',l.next_follow_up_at,
   'version',l.version,'created_at',l.created_at,'updated_at',l.updated_at
  ) ORDER BY l.updated_at DESC,l.id),'[]'::jsonb) INTO v_result
  FROM (
