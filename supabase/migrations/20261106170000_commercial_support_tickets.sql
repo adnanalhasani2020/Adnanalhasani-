@@ -206,7 +206,6 @@ BEGIN
  IF v_role='viewer' OR (v_role='staff' AND v_ticket.assigned_to IS DISTINCT FROM v_uid AND v_ticket.created_by IS DISTINCT FROM v_uid) THEN
   RAISE EXCEPTION 'support_ticket_message_forbidden' USING ERRCODE='42501';
  END IF;
- IF v_ticket.status='closed' THEN RAISE EXCEPTION 'support_ticket_closed' USING ERRCODE='22023'; END IF;
  v_fp:=md5(jsonb_build_object('ticket_id',p_ticket_id,'body',btrim(p_body))::text);
  PERFORM pg_advisory_xact_lock(hashtextextended(v_ticket.organization_id::text||':'||v_ticket.activity_id::text||':'||v_uid::text||':'||btrim(p_idempotency_key),0));
  SELECT * INTO v_existing FROM public.commercial_support_ticket_messages m
@@ -216,6 +215,7 @@ BEGIN
   IF v_existing.request_fingerprint IS DISTINCT FROM v_fp THEN RAISE EXCEPTION 'support_message_idempotency_conflict' USING ERRCODE='23505'; END IF;
   RETURN jsonb_build_object('id',v_existing.id,'ticket_id',p_ticket_id,'replayed',true);
  END IF;
+ IF v_ticket.status='closed' THEN RAISE EXCEPTION 'support_ticket_closed' USING ERRCODE='22023'; END IF;
  INSERT INTO public.commercial_support_ticket_messages(organization_id,activity_id,ticket_id,body,created_by,idempotency_key,request_fingerprint)
  VALUES(v_ticket.organization_id,v_ticket.activity_id,p_ticket_id,btrim(p_body),v_uid,btrim(p_idempotency_key),v_fp)
  RETURNING id INTO v_id;
