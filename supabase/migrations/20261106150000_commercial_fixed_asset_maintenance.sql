@@ -31,7 +31,7 @@ CREATE TABLE public.commercial_fixed_asset_maintenance (
   UNIQUE(organization_id,activity_id,created_by,idempotency_key),
  CONSTRAINT commercial_fixed_asset_maintenance_due_ck CHECK(due_date IS NULL OR due_date>=scheduled_date),
  CONSTRAINT commercial_fixed_asset_maintenance_completed_ck CHECK(
-  (status='completed' AND completed_at IS NOT NULL)
+  (status='completed' AND completed_at IS NOT NULL AND completed_at>=scheduled_date)
   OR (status<>'completed' AND completed_at IS NULL)
  )
 );
@@ -158,6 +158,9 @@ BEGIN
  END IF;
  IF p_status='completed' AND p_completed_at IS NULL THEN
   RAISE EXCEPTION 'asset_maintenance_completion_date_required' USING ERRCODE='22023';
+ END IF;
+ IF p_status='completed' AND p_completed_at<v_item.scheduled_date THEN
+  RAISE EXCEPTION 'asset_maintenance_completion_before_schedule' USING ERRCODE='22023';
  END IF;
  IF v_item.version<>p_expected_version THEN RAISE EXCEPTION 'asset_maintenance_version_conflict' USING ERRCODE='40001'; END IF;
  UPDATE public.commercial_fixed_asset_maintenance SET status=p_status,
